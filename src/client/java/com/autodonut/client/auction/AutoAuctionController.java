@@ -158,6 +158,10 @@ public final class AutoAuctionController {
 			status = "Offline (safety lockdown)";
 			return;
 		}
+		if (com.autodonut.client.ui.BootOverlay.booting()) {
+			status = "Booting up";
+			return;
+		}
 		if (!cfg.autoAuctionEnabled) {
 			reset();
 			status = "Disabled";

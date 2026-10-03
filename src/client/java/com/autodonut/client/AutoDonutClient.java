@@ -20,6 +20,7 @@ import com.autodonut.AutoDonut;
 import com.autodonut.client.auction.AutoAuctionController;
 import com.autodonut.client.config.AutoDonutConfig;
 import com.autodonut.client.ui.AutoDonutScreen;
+import com.autodonut.client.ui.BootOverlay;
 import com.autodonut.client.ui.StatusHud;
 
 public class AutoDonutClient implements ClientModInitializer {
@@ -69,14 +70,18 @@ public class AutoDonutClient implements ClientModInitializer {
 				}));
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			Lockdown.onSystemMessage(message);
+			if (!overlay) BootOverlay.onSystemMessage(message);
 			AutoAuctionController.get().onGameMessage(message, overlay);
 		});
 		ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, time) -> Lockdown.onChatMessage(message));
 		ClientPlayConnectionEvents.DISCONNECT.register((listener, client) -> {
 			ServerContext.onDisconnect();
+			BootOverlay.onDisconnect();
 			AutoAuctionController.get().onDisconnect();
 		});
 		HudElementRegistry.addLast(id("status"), StatusHud::extract);
+		HudElementRegistry.addLast(id("boot"), BootOverlay::extract);
+		ClientPlayConnectionEvents.JOIN.register((listener, sender, client) -> BootOverlay.onJoin());
 	}
 
 	private void onTick(Minecraft client) {
@@ -91,5 +96,6 @@ public class AutoDonutClient implements ClientModInitializer {
 		QuickSell.tick(client);
 		AutoAuctionController.get().tick(client);
 		BootSequence.tick(client);
+		BootOverlay.reportFailures(client);
 	}
 }
