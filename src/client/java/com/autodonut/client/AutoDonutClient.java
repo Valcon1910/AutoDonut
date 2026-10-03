@@ -46,7 +46,7 @@ public class AutoDonutClient implements ClientModInitializer {
 
 		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
 				"key.autodonut.open",
-				InputConstants.Type.KEYSYM,
+				InputConstants.Type.KEYBOARD,
 				InputConstants.KEY_K,
 				CATEGORY
 		));
