@@ -53,7 +53,7 @@ public class UiButton extends Widget {
 			}
 		}
 		int inset = Math.round(press.get());
-		ui.card(x + inset, y + inset, w - inset * 2, h - inset * 2, 5, bg, border);
+		ui.card(x + inset, y + inset, w - inset * 2, h - inset * 2, 3, bg, border);
 		ui.textCentered(label, x + w / 2, y + (h - ui.lineHeight()) / 2 + 1, fg);
 	}
 

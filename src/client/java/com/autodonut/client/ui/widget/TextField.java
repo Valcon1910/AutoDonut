@@ -56,7 +56,7 @@ public class TextField extends Widget {
 		focus.set(focused ? 1 : 0);
 		float f = focus.update(ui.dt);
 		int border = Anim.lerpColor(Anim.lerpColor(ui.theme.border(), ui.theme.textMuted(), hover.get() * 0.4f), ui.theme.accent(), f);
-		ui.card(x, y, w, h, 5, ui.theme.surface(), border);
+		ui.card(x, y, w, h, 3, ui.theme.surface(), border);
 
 		int tx = x + 6;
 		int ty = y + (h - ui.lineHeight()) / 2 + 1;

@@ -39,6 +39,9 @@ public class AutoDonutConfig {
 	public boolean pauseInMenus = true;
 	public boolean showHud = true;
 
+	// Connect screen
+	public boolean bootMessage = true;
+
 	public static AutoDonutConfig get() {
 		if (instance == null) load();
 		return instance;

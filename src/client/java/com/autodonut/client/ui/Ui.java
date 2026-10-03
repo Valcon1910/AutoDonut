@@ -46,6 +46,43 @@ public final class Ui {
 		round(x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), fill);
 	}
 
+	/** Thin horizontal progress bar like a stat meter. */
+	public void meter(int x, int y, int w, float fraction, int fillColor) {
+		fill(x, y, x + w, y + 3, theme.track());
+		int fw = Math.round(Anim.clamp01(fraction) * w);
+		if (fw > 0) fill(x, y, x + fw, y + 3, fillColor);
+	}
+
+	/** Small uppercase status label, e.g. "RUNNING". Returns its width. */
+	public int tag(String label, int right, int y, int color) {
+		textRight(label, right, y, color);
+		return width(label);
+	}
+
+	/** 1px dashed rounded-ish outline. */
+	public void dashed(int x, int y, int w, int h, int color) {
+		for (int i = x + 3; i < x + w - 3; i += 6) {
+			fill(i, y, Math.min(i + 3, x + w - 3), y + 1, color);
+			fill(i, y + h - 1, Math.min(i + 3, x + w - 3), y + h, color);
+		}
+		for (int j = y + 3; j < y + h - 3; j += 6) {
+			fill(x, j, x + 1, Math.min(j + 3, y + h - 3), color);
+			fill(x + w - 1, j, x + w, Math.min(j + 3, y + h - 3), color);
+		}
+	}
+
+	/** Rectangle outline of the given thickness with slightly rounded corners. */
+	public void outline(int x, int y, int w, int h, int t, int color) {
+		fill(x + 2, y, x + w - 2, y + t, color);
+		fill(x + 2, y + h - t, x + w - 2, y + h, color);
+		fill(x, y + 2, x + t, y + h - 2, color);
+		fill(x + w - t, y + 2, x + w, y + h - 2, color);
+		fill(x + 1, y + 1, x + 2, y + 2, color);
+		fill(x + w - 2, y + 1, x + w - 1, y + 2, color);
+		fill(x + 1, y + h - 2, x + 2, y + h - 1, color);
+		fill(x + w - 2, y + h - 2, x + w - 1, y + h - 1, color);
+	}
+
 	public void circle(int cx, int cy, int r, int color) {
 		round(cx - r, cy - r, r * 2, r * 2, r, color);
 	}

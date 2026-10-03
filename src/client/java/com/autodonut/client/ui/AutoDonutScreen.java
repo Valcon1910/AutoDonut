@@ -2,6 +2,7 @@ package com.autodonut.client.ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
@@ -20,7 +21,8 @@ import com.autodonut.client.config.AuctionRule;
 import com.autodonut.client.config.AutoDonutConfig;
 import com.autodonut.client.config.PriceFormat;
 import com.autodonut.client.config.QuantityMode;
-import com.autodonut.client.ui.widget.RuleList;
+import com.autodonut.client.ui.widget.FeatureCard;
+import com.autodonut.client.ui.widget.RuleGrid;
 import com.autodonut.client.ui.widget.Segmented;
 import com.autodonut.client.ui.widget.SettingRow;
 import com.autodonut.client.ui.widget.Slider;
@@ -32,13 +34,25 @@ import com.autodonut.client.ui.widget.Widget;
 
 /** The AutoDonut control panel, opened with K. Fully custom drawn with animated transitions. */
 public class AutoDonutScreen extends Screen {
-	private enum Page { AUCTION, SAFETY, EDIT }
+	private enum Page { HOME, AUCTION, SAFETY, EDIT }
 
 	private static final float OPEN_MS = 220f;
 	private static final float CLOSE_MS = 160f;
 	private static final int RESULT_ROW_H = 18;
 	private static final int MAX_RESULTS_SHOWN = 6;
-	private static final String[] NAV = {"Auto Auction", "Safety"};
+	private static final int TOP = 28;
+	private static final int NAV_ITEM_H = 18;
+	private static final int NAV_SECTION_H = 14;
+	/** Sidebar layout: section headers (page == null) and the pages under them. */
+	private record NavEntry(String label, Page page) { }
+	private static final NavEntry[] NAV = {
+			new NavEntry("AUTODONUT", null),
+			new NavEntry("Home", Page.HOME),
+			new NavEntry("FEATURES", null),
+			new NavEntry("Auto Auction", Page.AUCTION),
+			new NavEntry("SYSTEM", null),
+			new NavEntry("Safety", Page.SAFETY),
+	};
 
 	private final AutoDonutConfig cfg = AutoDonutConfig.get();
 	private final Ui ui = new Ui();
@@ -46,7 +60,7 @@ public class AutoDonutScreen extends Screen {
 	private final Anim navAnim = new Anim(0, 16);
 	private final Anim pageAnim = new Anim(1, 11);
 	private final Anim closeHover = new Anim(0, 16);
-	private final Anim[] navHover = {new Anim(0, 16), new Anim(0, 16)};
+	private final Anim[] navHover = new Anim[NAV.length];
 	private final List<Widget> widgets = new ArrayList<>();
 	private final List<Widget> chrome = new ArrayList<>();
 
@@ -55,7 +69,7 @@ public class AutoDonutScreen extends Screen {
 	private long lastFrame = System.nanoTime();
 	private float openProgress;
 
-	private Page page = Page.AUCTION;
+	private Page page = Page.HOME;
 	private AuctionRule editing;
 	private TextField searchField;
 	private List<ItemIndex.Entry> results = List.of();
@@ -66,6 +80,7 @@ public class AutoDonutScreen extends Screen {
 	public AutoDonutScreen() {
 		super(Component.literal("AutoDonut"));
 		themeAnim = new Anim(cfg.darkMode ? 0 : 1, 7);
+		for (int i = 0; i < navHover.length; i++) navHover[i] = new Anim(0, 16);
 	}
 
 	// ---------------------------------------------------------------- layout
@@ -73,21 +88,40 @@ public class AutoDonutScreen extends Screen {
 	@Override
 	protected void init() {
 		ui.font = font;
-		pw = Math.min(430, width - 20);
-		ph = Math.min(270, height - 20);
+		pw = Math.min(520, width - 16);
+		ph = Math.min(330, height - 16);
 		px = (width - pw) / 2;
 		py = (height - ph) / 2;
-		sw = Math.max(92, Math.min(112, Math.round(pw * 0.26f)));
+		sw = Math.max(90, Math.min(120, Math.round(pw * 0.24f)));
 		buildChrome();
 		buildPage();
 	}
 
 	private int contentX() {
-		return px + sw + 14;
+		return px + sw + 12;
 	}
 
 	private int contentW() {
-		return pw - sw - 28;
+		return pw - sw - 24;
+	}
+
+	/** Top of the page body, below the page header and its divider. */
+	private int bodyTop() {
+		return py + TOP + 42;
+	}
+
+	private int navY(int index) {
+		int y = py + TOP + 8;
+		for (int i = 0; i < index; i++) y += NAV[i].page() == null ? NAV_SECTION_H : NAV_ITEM_H + 2;
+		return y;
+	}
+
+	private int closeX() {
+		return px + pw - 8 - 16;
+	}
+
+	private int closeY() {
+		return py + (TOP - 16) / 2;
 	}
 
 	private void buildChrome() {
@@ -96,7 +130,7 @@ public class AutoDonutScreen extends Screen {
 			cfg.darkMode = dark;
 			AutoDonutConfig.save();
 		});
-		theme.bounds(px + pw - 14 - 16 - 8 - 34, py + 12, 34, 16);
+		theme.bounds(closeX() - 8 - 34, py + (TOP - 16) / 2, 34, 16);
 		chrome.add(theme);
 	}
 
@@ -106,24 +140,54 @@ public class AutoDonutScreen extends Screen {
 		results = List.of();
 		int x = contentX();
 		int w = contentW();
-		int top = py + 44;
+		int top = bodyTop();
 
 		switch (page) {
+			case HOME -> {
+				AutoAuctionController auction = AutoAuctionController.get();
+				List<FeatureCard> cards = List.of(
+						new FeatureCard("Auto Auction", "Lists matching items on /ah for you",
+								auction::status, () -> cfg.autoAuctionEnabled, v -> {
+									cfg.autoAuctionEnabled = v;
+									AutoDonutConfig.save();
+								}, () -> setPage(Page.AUCTION)),
+						new FeatureCard("Boot Message", "\"AutoDonut Booting Up\" when joining",
+								() -> "donutsmp.net", () -> cfg.bootMessage, v -> {
+									cfg.bootMessage = v;
+									AutoDonutConfig.save();
+								}, null),
+						new FeatureCard("HUD Status", "Corner pill while Auto Auction runs",
+								() -> "", () -> cfg.showHud, v -> {
+									cfg.showHud = v;
+									AutoDonutConfig.save();
+								}, null),
+						new FeatureCard("Donut SMP Only", "Features stay idle on other servers",
+								() -> ServerContext.isOnDonut() ? "Connected" : "Not connected", () -> cfg.onlyOnDonut, v -> {
+									cfg.onlyOnDonut = v;
+									AutoDonutConfig.save();
+								}, () -> setPage(Page.SAFETY))
+				);
+				int cols = w >= 260 ? 2 : 1;
+				int gap = 6;
+				int cw = (w - gap * (cols - 1)) / cols;
+				int rows = (cards.size() + cols - 1) / cols;
+				int ch = Math.max(40, Math.min(58, (py + ph - 8 - top - gap * (rows - 1)) / rows));
+				for (int i = 0; i < cards.size(); i++) {
+					cards.get(i).bounds(x + (i % cols) * (cw + gap), top + (i / cols) * (ch + gap), cw, ch);
+					widgets.add(cards.get(i));
+				}
+			}
 			case AUCTION -> {
 				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoAuctionEnabled, v -> {
 					cfg.autoAuctionEnabled = v;
 					AutoDonutConfig.save();
 				});
-				master.bounds(x + w - ToggleSwitch.WIDTH - 10, top + 10, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT);
+				master.bounds(x + w - ToggleSwitch.WIDTH - 8, top + 8, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT);
 				widgets.add(master);
 
-				String add = "+ Add item";
-				int addW = UiButton.widthFor(ui, add);
-				widgets.add(new UiButton(add, UiButton.Style.PRIMARY, this::addRule).bounds(x + w - addW, top + 40, addW, 16));
-
-				RuleList list = new RuleList(cfg.rules, this::editRule, AutoDonutConfig::save);
-				list.bounds(x, top + 62, w, py + ph - 12 - (top + 62));
-				widgets.add(list);
+				RuleGrid grid = new RuleGrid(cfg.rules, this::editRule, this::addRule, AutoDonutConfig::save);
+				grid.bounds(x, top + 50, w, py + ph - 8 - (top + 50));
+				widgets.add(grid);
 			}
 			case SAFETY -> {
 				List<SettingRow> rows = List.of(
@@ -150,7 +214,7 @@ public class AutoDonutScreen extends Screen {
 						new SettingRow("HUD status", "Show what Auto Auction is doing",
 								toggle(() -> cfg.showHud, v -> cfg.showHud = v), ToggleSwitch.WIDTH)
 				);
-				int avail = py + ph - 10 - top;
+				int avail = py + ph - 8 - top;
 				int gap = 3;
 				int rowH = Math.min(26, (avail + gap) / rows.size() - gap);
 				for (int i = 0; i < rows.size(); i++) {
@@ -177,25 +241,25 @@ public class AutoDonutScreen extends Screen {
 			resultScroll = 0;
 			results = ItemIndex.search(text, 60);
 		}).searchIcon();
-		searchField.bounds(x, top + 10, w, 18);
+		searchField.bounds(x, top + 9, w, 18);
 		widgets.add(searchField);
 
 		int half = (w - 6) / 2;
 		TextField price = new TextField("e.g. 1.5k or 250000", rule.priceText, 16, PriceFormat::isPriceChar, t -> rule.priceText = t).prefix("$ ");
-		price.bounds(x, top + 44, half, 18);
+		price.bounds(x, top + 40, half, 18);
 		widgets.add(price);
 		widgets.add(new Segmented(new String[]{"Per item", "Per stack"}, () -> rule.pricePerItem ? 0 : 1,
-				i -> rule.pricePerItem = i == 0).bounds(x + half + 6, top + 44, w - half - 6, 18));
+				i -> rule.pricePerItem = i == 0).bounds(x + half + 6, top + 40, w - half - 6, 18));
 
 		QuantityMode[] modes = QuantityMode.values();
 		String[] labels = new String[modes.length];
 		for (int i = 0; i < modes.length; i++) labels[i] = modes[i].label();
-		widgets.add(new Segmented(labels, () -> rule.mode.ordinal(), i -> rule.mode = modes[i]).bounds(x, top + 78, w, 18));
+		widgets.add(new Segmented(labels, () -> rule.mode.ordinal(), i -> rule.mode = modes[i]).bounds(x, top + 71, w, 18));
 
 		widgets.add(new Slider(1, 64, () -> rule.amount, v -> rule.amount = v, v -> v + "x").labelWidth(28)
-				.bounds(x + 48, top + 102, w - 48, 14));
+				.bounds(x + 48, top + 95, w - 48, 14));
 
-		int by = Math.max(top + 156, py + ph - 28);
+		int by = Math.max(top + 142, py + ph - 26);
 		int doneW = 60;
 		widgets.add(new UiButton("Done", UiButton.Style.PRIMARY, this::finishEditing).bounds(x + w - doneW, by, doneW, 18));
 		widgets.add(new UiButton("Delete", UiButton.Style.DANGER, () -> {
@@ -294,82 +358,81 @@ public class AutoDonutScreen extends Screen {
 		graphics.pose().popMatrix();
 	}
 
+	private int activeNavIndex() {
+		Page target = page == Page.EDIT ? Page.AUCTION : page;
+		for (int i = 0; i < NAV.length; i++) {
+			if (NAV[i].page() == target) return i;
+		}
+		return 1;
+	}
+
 	private void drawPanel(int mx, int my) {
 		Theme t = ui.theme;
-		// Soft shadow
-		for (int i = 4; i >= 1; i--) {
-			ui.round(px - i * 2, py - i * 2 + 3, pw + i * 4, ph + i * 4, 12 + i * 2, t.shadow() & 0x22FFFFFF);
+		for (int i = 3; i >= 1; i--) {
+			ui.round(px - i * 2, py - i * 2 + 2, pw + i * 4, ph + i * 4, 6 + i * 2, t.shadow() & 0x22FFFFFF);
 		}
-		ui.card(px, py, pw, ph, 10, t.panel(), t.border());
+		ui.card(px, py, pw, ph, 4, t.panel(), t.border());
 
-		// Sidebar
-		ui.round(px + 1, py + 1, sw + 10, ph - 2, 9, t.sidebar());
-		ui.fill(px + sw, py + 1, px + sw + 11, py + ph - 1, t.panel());
-		ui.fill(px + sw, py + 10, px + sw + 1, py + ph - 10, t.border());
-
-		// Brand: a little donut
-		int bx = px + 18, by = py + 19;
+		// Top bar
+		ui.round(px + 1, py + 1, pw - 2, TOP, 3, t.sidebar());
+		ui.fill(px + 1, py + TOP - 3, px + pw - 1, py + TOP, t.sidebar());
+		ui.fill(px + 1, py + TOP, px + pw - 1, py + TOP + 1, t.border());
+		int bx = px + 15, by = py + TOP / 2;
 		ui.circle(bx, by, 7, t.accent());
 		ui.circle(bx, by, 5, Anim.lerpColor(t.accent(), 0xFFFFFFFF, 0.25f));
 		ui.circle(bx, by, 2, t.sidebar());
-		ui.text("AutoDonut", px + 30, py + 12, t.text());
-		ui.text("AutoDonut", px + 31, py + 12, t.text());
-		ui.text("v" + AutoDonutClient.version(), px + 30, py + 22, t.textMuted());
+		ui.text("AUTODONUT", px + 27, by - 3, t.accent());
+		ui.text("AUTODONUT", px + 28, by - 3, t.accent());
+		ui.text("v" + AutoDonutClient.version(), px + 34 + ui.width("AUTODONUT"), by - 3, t.textMuted());
 
-		// Navigation
-		int navY = py + 44;
-		int active = page == Page.SAFETY ? 1 : 0;
-		navAnim.set(active);
-		float n = navAnim.update(ui.dt);
-		ui.round(px + 8, navY + Math.round(n * 22), sw - 16, 18, 5, t.surface());
-		ui.round(px + 8, navY + Math.round(n * 22) + 4, 2, 10, 1, t.accent());
+		// Sidebar
+		ui.fill(px + 1, py + TOP + 1, px + sw, py + ph - 4, t.sidebar());
+		ui.round(px + 1, py + ph - 8, sw - 1, 7, 3, t.sidebar());
+		ui.fill(px + sw, py + TOP + 1, px + sw + 1, py + ph - 1, t.border());
+
+		int active = activeNavIndex();
+		navAnim.set(navY(active));
+		if (navAnim.get() == 0) navAnim.snap(navY(active));
+		int hy = Math.round(navAnim.update(ui.dt));
+		ui.round(px + 5, hy, sw - 10, NAV_ITEM_H, 2, Anim.lerpColor(t.sidebar(), t.accent(), 0.10f));
+		ui.outline(px + 5, hy, sw - 10, NAV_ITEM_H, 1, t.accent());
+
 		for (int i = 0; i < NAV.length; i++) {
-			int iy = navY + i * 22;
-			boolean hovered = mx >= px + 8 && mx < px + sw - 8 && my >= iy && my < iy + 18;
-			navHover[i].set(hovered && i != active ? 1 : 0);
-			navHover[i].update(ui.dt);
-			if (navHover[i].get() > 0.01f) {
-				ui.round(px + 8, iy, sw - 16, 18, 5, (t.surface() & 0x00FFFFFF) | (Math.round(navHover[i].get() * 0x80) << 24));
+			NavEntry entry = NAV[i];
+			int iy = navY(i);
+			if (entry.page() == null) {
+				// Section header with a small down-arrow
+				int ay = iy + 4;
+				ui.fill(px + 9, ay, px + 14, ay + 1, t.textMuted());
+				ui.fill(px + 10, ay + 1, px + 13, ay + 2, t.textMuted());
+				ui.fill(px + 11, ay + 2, px + 12, ay + 3, t.textMuted());
+				ui.text(entry.label(), px + 17, iy + 2, t.textMuted());
+				continue;
 			}
+			boolean hovered = i != active && mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H;
+			navHover[i].set(hovered ? 1 : 0);
+			navHover[i].update(ui.dt);
 			int color = i == active ? t.text() : Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
-			ui.text(NAV[i], px + 16, iy + 5, color);
-			if (i == 0) {
-				int dot = AutoAuctionController.get().isActive() ? t.success() : t.track();
-				ui.circle(px + sw - 16, iy + 9, 2, dot);
+			ui.text(entry.label(), px + 14 + Math.round(navHover[i].get() * 2), iy + 5, color);
+			if (entry.page() == Page.AUCTION) {
+				ui.circle(px + sw - 14, iy + 9, 2, AutoAuctionController.get().isActive() ? t.success() : t.track());
 			}
 		}
 
-		// Footer: connection state and shortcut hint
 		boolean donut = ServerContext.isOnDonut();
-		int fy = py + ph - 26;
-		ui.circle(px + 14, fy + 4, 2, donut ? t.success() : t.track());
-		ui.text(donut ? "Donut SMP" : "Not connected", px + 20, fy, donut ? t.text() : t.textMuted());
-		ui.text("Press K to close", px + 10, fy + 11, t.textMuted());
-
-		// Header
-		int hx = contentX();
-		String title = switch (page) {
-			case AUCTION -> "Auto Auction";
-			case SAFETY -> "Safety";
-			case EDIT -> "Edit item";
-		};
-		String subtitle = switch (page) {
-			case AUCTION -> "Lists your items on /ah automatically";
-			case SAFETY -> "Pacing that keeps things human";
-			case EDIT -> "Pick the item, price and stack size";
-		};
-		ui.text(title, hx, py + 12, t.text());
-		ui.text(title, hx + 1, py + 12, t.text());
-		ui.text(ui.trim(subtitle, contentW() - 70), hx, py + 23, t.textMuted());
+		int fy = py + ph - 24;
+		ui.fill(px + 8, fy - 6, px + sw - 8, fy - 5, t.border());
+		ui.circle(px + 11, fy + 4, 2, donut ? t.success() : t.track());
+		ui.text(donut ? "Donut SMP" : "Not connected", px + 17, fy, donut ? t.text() : t.textMuted());
+		ui.text("K to close", px + 8, fy + 11, t.textMuted());
 
 		for (Widget w : chrome) w.render(ui, mx, my);
 
-		// Close button
-		int cx = px + pw - 14 - 16, cy = py + 12;
+		int cx = closeX(), cy = closeY();
 		boolean overClose = mx >= cx && mx < cx + 16 && my >= cy && my < cy + 16;
 		closeHover.set(overClose ? 1 : 0);
 		closeHover.update(ui.dt);
-		ui.round(cx, cy, 16, 16, 5, Anim.lerpColor(t.panel(), t.surfaceHover(), closeHover.get()));
+		ui.round(cx, cy, 16, 16, 3, Anim.lerpColor(t.sidebar(), t.surfaceHover(), closeHover.get()));
 		int xc = Anim.lerpColor(t.textMuted(), t.text(), closeHover.get());
 		for (int i = 0; i < 6; i++) {
 			ui.fill(cx + 5 + i, cy + 5 + i, cx + 6 + i, cy + 6 + i, xc);
@@ -377,38 +440,63 @@ public class AutoDonutScreen extends Screen {
 		}
 	}
 
-	/** Static text and cards that belong to the current page. */
+	/** Page header (accent bar, title, description, divider) plus static parts of each page. */
 	private void drawPageDecor() {
 		Theme t = ui.theme;
 		int x = contentX();
 		int w = contentW();
-		int top = py + 44;
+		String title = switch (page) {
+			case HOME -> "Home";
+			case AUCTION -> "Auto Auction";
+			case SAFETY -> "Safety";
+			case EDIT -> "Edit item";
+		};
+		String subtitle = switch (page) {
+			case HOME -> "Turn each AutoDonut feature on or off. Click a card to open its settings.";
+			case AUCTION -> "Pick items to sell. Matching stacks are listed on /ah automatically.";
+			case SAFETY -> "Pacing that keeps every action irregular and human.";
+			case EDIT -> "Choose the item, its price and which stack sizes to sell.";
+		};
+		int hy = py + TOP + 8;
+		ui.fill(x, hy, x + 2, hy + 21, t.accent());
+		ui.text(title, x + 8, hy + 1, t.text());
+		ui.text(ui.trim(subtitle, w - 8), x + 8, hy + 12, t.textMuted());
+		ui.fill(x, hy + 27, x + w, hy + 28, t.border());
+
+		int top = bodyTop();
 		switch (page) {
 			case AUCTION -> {
-				ui.card(x, top, w, 34, 7, t.surface(), t.border());
-				boolean active = AutoAuctionController.get().isActive();
-				ui.circle(x + 11, top + 12, 3, active ? t.success() : t.track());
-				ui.text("Enabled", x + 19, top + 8, t.text());
-				String status = AutoAuctionController.get().status();
-				int listed = AutoAuctionController.get().listedThisSession();
-				if (listed > 0) status += "  -  " + listed + " listed";
-				ui.text(ui.trim(status, w - 60), x + 19, top + 20, t.textMuted());
+				AutoAuctionController auction = AutoAuctionController.get();
+				boolean active = auction.isActive();
+				ui.round(x, top, w, 42, 3, t.surface());
+				if (cfg.autoAuctionEnabled) ui.outline(x, top, w, 42, 1, t.accent());
+				ui.text("AUTO AUCTION", x + 8, top + 7, cfg.autoAuctionEnabled ? t.accent() : t.text());
+				String tag = active ? "RUNNING" : cfg.autoAuctionEnabled ? "WAITING" : "OFF";
+				int tagColor = active ? t.success() : cfg.autoAuctionEnabled ? t.textMuted() : t.textMuted();
+				ui.text(tag, x + 14 + ui.width("AUTO AUCTION"), top + 7, tagColor);
+				ui.text(ui.trim(auction.status(), w - 50), x + 8, top + 19, t.textMuted());
 
-				ui.text("Items", x, top + 45, t.text());
-				ui.text(cfg.rules.size() + "", x + ui.width("Items") + 5, top + 45, t.textMuted());
+				int hour = auction.listedLastHour();
+				String count = hour + " / " + cfg.maxListingsPerHour;
+				ui.text("THIS HOUR", x + 8, top + 30, t.textMuted());
+				int mx0 = x + 14 + ui.width("THIS HOUR");
+				int mw = w - (mx0 - x) - ui.width(count) - 16;
+				ui.meter(mx0, top + 33, mw, hour / (float) cfg.maxListingsPerHour, t.accent());
+				ui.textRight(count, x + w - 8, top + 30, t.text());
 			}
 			case EDIT -> {
 				AuctionRule rule = editing;
-				ui.text("Item", x, top, t.textMuted());
-				ui.text("Price", x, top + 34, t.textMuted());
-				ui.text("Quantity", x, top + 68, t.textMuted());
-				ui.text("Amount", x, top + 105, t.text());
+				if (rule == null) return;
+				ui.text("ITEM", x, top, t.textMuted());
+				ui.text("PRICE", x, top + 31, t.textMuted());
+				ui.text("QUANTITY", x, top + 62, t.textMuted());
+				ui.text("Amount", x, top + 98, t.text());
 
 				ItemIndex.Entry entry = ItemIndex.byId(rule.itemId);
 				if (entry != null && searchField != null && searchField.text().equals(entry.name())) {
-					ui.item(entry.stack(), x + w - 19, top + 11);
+					ui.item(entry.stack(), x + w - 19, top + 10);
 				}
-				drawPreview(rule, entry, x, top + 124, w);
+				drawPreview(rule, entry, x, top + 114, w);
 			}
 			default -> { }
 		}
@@ -492,17 +580,17 @@ public class AutoDonutScreen extends Screen {
 		}
 
 		// Close button
-		int cx = px + pw - 14 - 16, cy = py + 12;
+		int cx = closeX(), cy = closeY();
 		if (mx >= cx && mx < cx + 16 && my >= cy && my < cy + 16) {
 			onClose();
 			return true;
 		}
 		// Navigation
 		for (int i = 0; i < NAV.length; i++) {
-			int iy = py + 44 + i * 22;
-			if (mx >= px + 8 && mx < px + sw - 8 && my >= iy && my < iy + 18) {
-				Page target = i == 0 ? Page.AUCTION : Page.SAFETY;
-				if (target != page) setPage(target);
+			if (NAV[i].page() == null) continue;
+			int iy = navY(i);
+			if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H) {
+				if (NAV[i].page() != page) setPage(NAV[i].page());
 				return true;
 			}
 		}
@@ -598,7 +686,7 @@ public class AutoDonutScreen extends Screen {
 	@Override
 	public void onClose() {
 		if (closingAt >= 0) return;
-		if (page == Page.EDIT) cleanUpEditing();
+		// Keep the editor's rule alive while the close animation still draws it; removed() cleans up.
 		AutoDonutConfig.save();
 		closingAt = System.nanoTime();
 	}

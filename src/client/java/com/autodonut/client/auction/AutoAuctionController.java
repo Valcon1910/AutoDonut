@@ -65,6 +65,16 @@ public final class AutoAuctionController {
 		return listedThisSession;
 	}
 
+	/** Listings made in the last rolling hour. */
+	public int listedLastHour() {
+		long now = System.currentTimeMillis();
+		int n = 0;
+		for (long t : recentListings) {
+			if (now - t <= HOUR_MS) n++;
+		}
+		return n;
+	}
+
 	public boolean isActive() {
 		AutoDonutConfig cfg = AutoDonutConfig.get();
 		return cfg.autoAuctionEnabled && (!cfg.onlyOnDonut || ServerContext.isOnDonut());

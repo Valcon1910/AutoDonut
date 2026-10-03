@@ -28,7 +28,7 @@ public class SettingRow extends Widget {
 
 	@Override
 	protected void draw(Ui ui, int mx, int my) {
-		ui.round(x, y, w, h, 5, Anim.lerpColor(ui.theme.panel(), ui.theme.surface(), 0.55f + hover.get() * 0.45f));
+		ui.round(x, y, w, h, 3, Anim.lerpColor(ui.theme.panel(), ui.theme.surface(), 0.55f + hover.get() * 0.45f));
 		int textW = w - controlWidth - 24;
 		boolean twoLines = !hint.isEmpty() && h >= 22;
 		int ty = twoLines ? y + h / 2 - ui.lineHeight() + 1 : y + (h - ui.lineHeight()) / 2 + 1;

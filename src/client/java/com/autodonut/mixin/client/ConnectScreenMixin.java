@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
 import com.autodonut.client.ServerContext;
+import com.autodonut.client.config.AutoDonutConfig;
 
 /**
  * Remembers which server we are joining, and on Donut SMP replaces the status shown after
@@ -30,7 +31,7 @@ public abstract class ConnectScreenMixin {
 
 	@ModifyVariable(method = "updateStatus", at = @At("HEAD"), argsOnly = true, require = 0)
 	private Component autodonut$bootMessage(Component status) {
-		if (!ServerContext.isOnDonut()) return status;
+		if (!ServerContext.isOnDonut() || !AutoDonutConfig.get().bootMessage) return status;
 		if (status.getContents() instanceof TranslatableContents translatable
 				&& "connect.encrypting".equals(translatable.getKey())) {
 			autodonut$encrypted = true;

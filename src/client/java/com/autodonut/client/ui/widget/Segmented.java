@@ -23,11 +23,11 @@ public class Segmented extends Widget {
 
 	@Override
 	protected void draw(Ui ui, int mx, int my) {
-		ui.card(x, y, w, h, 5, ui.theme.surface(), ui.theme.border());
+		ui.card(x, y, w, h, 3, ui.theme.surface(), ui.theme.border());
 		slide.set(getter.getAsInt());
 		float s = slide.update(ui.dt);
 		float segW = (w - 4) / (float) options.length;
-		ui.round(x + 2 + Math.round(s * segW), y + 2, Math.round(segW), h - 4, 4, ui.theme.accent());
+		ui.round(x + 2 + Math.round(s * segW), y + 2, Math.round(segW), h - 4, 2, ui.theme.accent());
 
 		int selected = getter.getAsInt();
 		for (int i = 0; i < options.length; i++) {
