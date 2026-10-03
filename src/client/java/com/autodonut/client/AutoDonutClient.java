@@ -81,7 +81,10 @@ public class AutoDonutClient implements ClientModInitializer {
 		});
 		HudElementRegistry.addLast(id("status"), StatusHud::extract);
 		HudElementRegistry.addLast(id("boot"), BootOverlay::extract);
-		ClientPlayConnectionEvents.JOIN.register((listener, sender, client) -> BootOverlay.onJoin());
+		ClientPlayConnectionEvents.JOIN.register((listener, sender, client) -> {
+			ServerContext.onJoin(client.getSingleplayerServer() != null);
+			BootOverlay.onJoin();
+		});
 	}
 
 	private void onTick(Minecraft client) {
@@ -94,6 +97,9 @@ public class AutoDonutClient implements ClientModInitializer {
 			if (client.gui.screen() == null) QuickSell.trigger(client);
 		}
 		QuickSell.tick(client);
+		if (client.player == null && !(client.gui.screen() instanceof net.minecraft.client.gui.screens.ConnectScreen)) {
+			ServerContext.onNotInWorld();
+		}
 		AutoAuctionController.get().tick(client);
 		BootSequence.tick(client);
 		BootOverlay.reportFailures(client);

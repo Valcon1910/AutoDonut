@@ -24,6 +24,7 @@ public class FeatureCard extends Widget {
 	private final Consumer<Boolean> setter;
 	private final Runnable onOpen;
 	private final Anim on;
+	private BooleanSupplier locked = () -> false;
 
 	public FeatureCard(ItemStack icon, String title, String description, Supplier<String> status,
 			BooleanSupplier getter, Consumer<Boolean> setter, Runnable onOpen) {
@@ -37,6 +38,16 @@ public class FeatureCard extends Widget {
 		this.on = new Anim(getter.getAsBoolean() ? 1 : 0, 14);
 	}
 
+	/** While locked the switch shows off and can't be turned on (e.g. not connected to Donut SMP). */
+	public FeatureCard locked(BooleanSupplier locked) {
+		this.locked = locked;
+		return this;
+	}
+
+	private boolean shownOn() {
+		return !locked.getAsBoolean() && getter.getAsBoolean();
+	}
+
 	private int switchX() {
 		return x + w - ToggleSwitch.WIDTH - 8;
 	}
@@ -47,7 +58,7 @@ public class FeatureCard extends Widget {
 
 	@Override
 	protected void draw(Ui ui, int mx, int my) {
-		on.set(getter.getAsBoolean() ? 1 : 0);
+		on.set(shownOn() ? 1 : 0);
 		float k = Anim.easeInOut(on.update(ui.dt));
 		float hv = hover.get();
 
@@ -68,7 +79,7 @@ public class FeatureCard extends Widget {
 			ui.text(lines.get(i), x + 8, y + 31 + i * 10, ui.theme.textMuted());
 		}
 
-		String tag = k > 0.5f ? "On" : "Off";
+		String tag = locked.getAsBoolean() ? "Offline" : k > 0.5f ? "On" : "Off";
 		int tagColor = k > 0.5f ? ui.theme.success() : ui.theme.textMuted();
 		ui.fill(x + 8, y + h - 19, x + w - 8, y + h - 18, ui.theme.border());
 		ui.text(tag, x + 8, y + h - 13, tagColor);
@@ -85,6 +96,10 @@ public class FeatureCard extends Widget {
 		if (!contains(mx, my)) return false;
 		int sx = switchX(), sy = switchY();
 		boolean onSwitch = mx >= sx - 3 && mx < sx + ToggleSwitch.WIDTH + 3 && my >= sy - 3 && my < sy + ToggleSwitch.HEIGHT + 3;
+		if (onSwitch && locked.getAsBoolean()) {
+			UiSounds.toggle(false);
+			return true;
+		}
 		if (onSwitch || onOpen == null) {
 			boolean next = !getter.getAsBoolean();
 			setter.accept(next);

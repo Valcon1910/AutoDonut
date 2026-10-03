@@ -212,7 +212,7 @@ public class AutoDonutScreen extends Screen {
 
 		switch (page) {
 			case HOME -> {
-				if (offlineReason() != null) {
+				if (Lockdown.active()) {
 					if (Lockdown.active() && ServerContext.isOnDonut()) {
 						if (bootStartedAt < 0) {
 							widgets.add(new UiButton("Boot up", UiButton.Style.PRIMARY, () -> {
@@ -239,18 +239,18 @@ public class AutoDonutScreen extends Screen {
 								auction::status, () -> cfg.autoAuctionEnabled, v -> {
 									cfg.setAutoAuction(v);
 									AutoDonutConfig.save();
-								}, () -> setPage(Page.AUCTION)),
+								}, () -> setPage(Page.AUCTION)).locked(this::runLocked),
 						new FeatureCard(new ItemStack(Items.GOLD_INGOT), "Quick Sell", "Press R on a held or hovered item to open Donut's sell screen",
 								() -> "Key: R", () -> cfg.quickSellEnabled, v -> {
 									cfg.quickSellEnabled = v;
 									AutoDonutConfig.save();
-								}, null),
+								}, null).locked(this::runLocked),
 						new FeatureCard(new ItemStack(Items.SPYGLASS), "HUD Status", "Small status label while Auto Auction runs",
 								() -> "", () -> cfg.showHud, v -> {
 									cfg.showHud = v;
 									AutoDonutConfig.save();
-								}, null),
-						new FeatureCard(new ItemStack(Items.SHIELD), "Donut SMP Only", "Features stay idle on other servers",
+								}, null).locked(this::runLocked),
+						new FeatureCard(new ItemStack(Items.SHIELD), "Server Lock", "Only run features while on Donut SMP",
 								() -> ServerContext.isOnDonut() ? "Connected" : "Not connected", () -> cfg.onlyOnDonut, v -> {
 									cfg.onlyOnDonut = v;
 									AutoDonutConfig.save();
@@ -274,7 +274,8 @@ public class AutoDonutScreen extends Screen {
 				}
 			}
 			case AUCTION -> {
-				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoAuctionEnabled, v -> {
+				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoAuctionEnabled && !runLocked(), v -> {
+					if (runLocked()) return;
 					cfg.setAutoAuction(v);
 					AutoDonutConfig.save();
 				});
@@ -818,19 +819,19 @@ public class AutoDonutScreen extends Screen {
 			}
 			case HOME -> {
 				String offline = offlineReason();
-				if (offline != null && bootStartedAt >= 0) {
+				if (Lockdown.active() && bootStartedAt >= 0) {
 					drawBooting(x, top, w);
 					return;
 				}
-				if (offline != null) {
+				if (Lockdown.active()) {
 					drawOffline(offline, x, top, w);
 					return;
 				}
 				if (revealAt >= 0) drawRevealSweep(x, top, w);
 				int ih = introHeight(w);
 				ui.round(x, top, w, ih, 3, t.surface());
-				ui.fill(x, top, x + 2, top + ih, t.accent());
-				List<String> lines = ui.wrap(INTRO, w - 20);
+				ui.fill(x, top, x + 2, top + ih, offline != null ? t.danger() : t.accent());
+				List<String> lines = ui.wrap(introText(), w - 20);
 				for (int i = 0; i < lines.size(); i++) {
 					ui.text(lines.get(i), x + 10, top + 7 + i * 10, i == 0 ? t.text() : t.textMuted());
 				}
@@ -839,6 +840,11 @@ public class AutoDonutScreen extends Screen {
 			}
 			default -> { }
 		}
+	}
+
+	/** Running features can't be switched on while offline. */
+	private boolean runLocked() {
+		return offlineReason() != null;
 	}
 
 	/** Why AutoDonut is offline, or null when it's running normally. */
@@ -952,8 +958,15 @@ public class AutoDonutScreen extends Screen {
 			+ "Nothing is installed on the server. Switch each feature on or off below, or open it from the sidebar to "
 			+ "change its settings.";
 
+	private String introText() {
+		String offline = offlineReason();
+		return offline != null
+				? "Offline. " + offline + " You can still change every setting; features start once you're connected."
+				: INTRO;
+	}
+
 	private int introHeight(int w) {
-		return ui.wrap(INTRO, w - 20).size() * 10 + 14;
+		return ui.wrap(introText(), w - 20).size() * 10 + 14;
 	}
 
 	private void drawPreview(AuctionRule rule, ItemIndex.Entry entry, int x, int y, int w) {
