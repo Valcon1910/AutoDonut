@@ -42,6 +42,8 @@ public final class AutoAuctionController {
 
 	/** How long to wait for a confirmation menu after sending the sell command. */
 	private static final long CONFIRM_WAIT_MS = 4000;
+	/** Donut SMP's combat tag lasts about 15s; stay paused a little longer after the last sign of combat. */
+	private static final long COMBAT_PAUSE_MS = 17_000;
 
 	private final Humanizer humanizer = new Humanizer(new Random());
 	private final Deque<Long> recentListings = new ArrayDeque<>();
@@ -62,6 +64,7 @@ public final class AutoAuctionController {
 	private String status = "Disabled";
 	/** Confirmation menu currently being handled; hidden from view when confirming in the background. */
 	private Screen confirmScreen;
+	private long combatUntil;
 
 	public static AutoAuctionController get() {
 		return INSTANCE;
@@ -105,6 +108,7 @@ public final class AutoAuctionController {
 
 	public void onDisconnect() {
 		reset();
+		combatUntil = 0;
 		pausedUntil = 0;
 		nextAllowedAt = 0;
 		failures.clear();
@@ -129,6 +133,14 @@ public final class AutoAuctionController {
 		if (cfg.onlyOnDonut && !ServerContext.isOnDonut()) {
 			reset();
 			status = "Waiting for Donut SMP";
+			return;
+		}
+		if (player.hurtTime > 0) combatUntil = Math.max(combatUntil, now + COMBAT_PAUSE_MS);
+		if (now < combatUntil) {
+			// Drop whatever was in progress (an open confirm menu becomes visible again);
+			// nothing is touched while in combat.
+			if (phase != Phase.IDLE || confirmScreen != null) reset();
+			status = "Paused, in combat (" + seconds(combatUntil - now) + ")";
 			return;
 		}
 		if (now < pausedUntil) {
@@ -332,9 +344,20 @@ public final class AutoAuctionController {
 		reset();
 	}
 
-	/** Called for every system (non-player) chat message. */
-	public void onGameMessage(Component message) {
+	/** Called for every system (non-player) message, including the action bar ({@code overlay}). */
+	public void onGameMessage(Component message, boolean overlay) {
 		long now = System.currentTimeMillis();
+		String lower = message.getString().toLowerCase(Locale.ROOT);
+		// Donut SMP shows a combat timer in the action bar and announces combat in chat.
+		if (lower.contains("combat")) {
+			if (lower.contains("no longer") || lower.contains("out of combat") || lower.contains("left combat")) {
+				combatUntil = 0;
+			} else {
+				combatUntil = now + COMBAT_PAUSE_MS;
+			}
+			return;
+		}
+		if (overlay) return;
 		if (lastCommandAt == 0 || now - lastCommandAt > 6000) return;
 		String text = message.getString().toLowerCase(Locale.ROOT);
 		for (String word : REFUSAL_WORDS) {

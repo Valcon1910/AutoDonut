@@ -53,7 +53,7 @@ public class AutoDonutClient implements ClientModInitializer {
 
 		ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-			if (!overlay) AutoAuctionController.get().onGameMessage(message);
+			AutoAuctionController.get().onGameMessage(message, overlay);
 		});
 		ClientPlayConnectionEvents.DISCONNECT.register((listener, client) -> {
 			ServerContext.onDisconnect();
