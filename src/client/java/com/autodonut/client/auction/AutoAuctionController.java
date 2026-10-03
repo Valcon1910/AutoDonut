@@ -31,6 +31,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 import com.autodonut.client.Compat;
+import com.autodonut.client.Lockdown;
 import com.autodonut.client.ServerContext;
 import com.autodonut.client.config.AuctionRule;
 import com.autodonut.client.config.AutoDonutConfig;
@@ -115,7 +116,7 @@ public final class AutoAuctionController {
 
 	public boolean isActive() {
 		AutoDonutConfig cfg = AutoDonutConfig.get();
-		return cfg.autoAuctionEnabled && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
+		return cfg.autoAuctionEnabled && !Lockdown.active() && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
 	}
 
 	/** True while this screen is the auction confirm menu being clicked in the background. */
@@ -150,6 +151,11 @@ public final class AutoAuctionController {
 		if (player == null || mc.gameMode == null) {
 			reset();
 			status = "Not in a world";
+			return;
+		}
+		if (Lockdown.active()) {
+			reset();
+			status = "Offline (safety lockdown)";
 			return;
 		}
 		if (!cfg.autoAuctionEnabled) {

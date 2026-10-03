@@ -26,7 +26,7 @@ public final class StatusHud {
 		UI.dt = Math.min(0.1f, (now - lastFrame) / 1_000_000_000f);
 		lastFrame = now;
 
-		boolean show = cfg.showHud && !Compat.streamerMode() && auction.isActive() && mc.gui.screen() == null && mc.player != null;
+		boolean show = cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active() && auction.isActive() && mc.gui.screen() == null && mc.player != null;
 		VISIBLE.set(show ? 1 : 0);
 		float v = VISIBLE.update(UI.dt);
 		if (v <= 0.01f) return;

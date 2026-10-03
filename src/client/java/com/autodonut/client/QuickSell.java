@@ -42,7 +42,7 @@ public final class QuickSell {
 	public static void trigger(Minecraft mc) {
 		AutoDonutConfig cfg = AutoDonutConfig.get();
 		LocalPlayer player = mc.player;
-		if (!cfg.quickSellEnabled || player == null) return;
+		if (!cfg.quickSellEnabled || player == null || Lockdown.active()) return;
 		if (cfg.onlyOnDonut && !ServerContext.isOnDonut()) return;
 
 		long now = System.currentTimeMillis();

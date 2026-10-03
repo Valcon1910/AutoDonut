@@ -30,10 +30,7 @@ public final class BootSequence {
 
 	private static final long STEP_MS = 170;
 	private static final List<Step> STEPS = List.of(
-			new Step("Loading settings", () -> {
-				AutoDonutConfig.load();
-				return AutoDonutConfig.lastLoadProblem;
-			}),
+			new Step("Loading settings", AutoDonutConfig::check),
 			new Step("Connecting features", () -> {
 				Minecraft mc = Minecraft.getInstance();
 				return mc.gameMode != null && !InventoryActions.available(mc)
@@ -70,6 +67,25 @@ public final class BootSequence {
 		startedAt = -1;
 		done = 0;
 		results.clear();
+	}
+
+	public static int stepCount() {
+		return STEPS.size();
+	}
+
+	public static String stepLabel(int i) {
+		return STEPS.get(i).label();
+	}
+
+	/** Runs one step; returns null when it passed, otherwise what failed and why. */
+	public static Failure runStep(int i) {
+		Step step = STEPS.get(i);
+		try {
+			String problem = step.check().get();
+			return problem == null ? null : new Failure(step.label(), problem, "A setting or file used by AutoDonut.");
+		} catch (Throwable t) {
+			return new Failure(step.label(), t.getClass().getSimpleName() + (t.getMessage() == null ? "" : ": " + t.getMessage()), blame(t));
+		}
 	}
 
 	private static void runNext() {

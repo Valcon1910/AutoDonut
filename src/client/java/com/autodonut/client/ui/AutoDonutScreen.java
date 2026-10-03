@@ -18,6 +18,7 @@ import net.minecraft.world.item.Items;
 
 import com.autodonut.client.AutoDonutClient;
 import com.autodonut.client.Compat;
+import com.autodonut.client.Lockdown;
 import com.autodonut.client.ServerContext;
 import com.autodonut.client.auction.AutoAuctionController;
 import com.autodonut.client.auction.ItemIndex;
@@ -71,6 +72,14 @@ public class AutoDonutScreen extends Screen {
 	private final Anim customRow = new Anim(0, 14);
 	private int hoveredResult = -1;
 	private int lastMouseX, lastMouseY;
+	private boolean lastOffline;
+	/** In-panel boot-up: start time (-1 = not booting), results per step (null entry = passed). */
+	private long bootStartedAt = -1;
+	private final List<com.autodonut.client.BootSequence.Failure> bootResults = new ArrayList<>();
+	private boolean bootWaiting;
+	/** When the post-boot reveal animation started (-1 = none). */
+	private long revealAt = -1;
+	private static final long BOOT_STEP_MS = 320;
 	private int[] appearanceLabels = new int[0];
 	/** Invisible vanilla text box that holds keyboard focus so the game sends typed characters. */
 	private EditBox inputSink;
@@ -203,6 +212,27 @@ public class AutoDonutScreen extends Screen {
 
 		switch (page) {
 			case HOME -> {
+				if (offlineReason() != null) {
+					if (Lockdown.active() && ServerContext.isOnDonut()) {
+						if (bootStartedAt < 0) {
+							widgets.add(new UiButton("Boot up", UiButton.Style.PRIMARY, () -> {
+								bootStartedAt = System.currentTimeMillis();
+								bootResults.clear();
+								bootWaiting = false;
+								rebuildPending = true;
+							}).bounds(x + w / 2 - 40, top + 118, 80, 20));
+						} else if (bootWaiting) {
+							widgets.add(new UiButton("Continue anyway", UiButton.Style.PRIMARY, this::finishBoot)
+									.bounds(x + w / 2 + 4, top + 196, 100, 18));
+							widgets.add(new UiButton("Cancel", UiButton.Style.SECONDARY, () -> {
+								bootStartedAt = -1;
+								bootWaiting = false;
+								rebuildPending = true;
+							}).bounds(x + w / 2 - 70, top + 196, 66, 18));
+						}
+					}
+					break;
+				}
 				AutoAuctionController auction = AutoAuctionController.get();
 				List<FeatureCard> cards = List.of(
 						new FeatureCard(new ItemStack(Items.EMERALD), "Auto Auction", "Lists matching items on /ah for you",
@@ -533,6 +563,11 @@ public class AutoDonutScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+		boolean offlineNow = offlineReason() != null;
+		if (offlineNow != lastOffline) {
+			lastOffline = offlineNow;
+			if (page == Page.HOME) rebuildPending = true;
+		}
 		if (rebuildPending) {
 			rebuildPending = false;
 			buildPage();
@@ -572,10 +607,21 @@ public class AutoDonutScreen extends Screen {
 				widget.render(ui, mouseX, mouseY);
 				graphics.pose().popMatrix();
 				ui.alpha = pageAlpha;
+			} else if (revealAt >= 0 && page == Page.HOME) {
+				// Post-boot reveal: each card rises and fades in, one after another.
+				int index = widgets.indexOf(widget);
+				float r = Anim.easeOutCubic(Anim.clamp01((System.currentTimeMillis() - revealAt - 150 - index * 90) / 380f));
+				ui.alpha = pageAlpha * r;
+				graphics.pose().pushMatrix();
+				graphics.pose().translate(0, (1f - r) * 12f);
+				widget.render(ui, mouseX, mouseY);
+				graphics.pose().popMatrix();
+				ui.alpha = pageAlpha;
 			} else {
 				widget.render(ui, mouseX, mouseY);
 			}
 		}
+		if (revealAt >= 0 && System.currentTimeMillis() - revealAt > 1500) revealAt = -1;
 		if (resultsVisible()) drawResults(mouseX, mouseY);
 		ui.alpha = openProgress;
 		ui.drawTooltip(px + 4, py + 4, px + pw - 4, py + ph - 4);
@@ -611,6 +657,11 @@ public class AutoDonutScreen extends Screen {
 		String ver = "v" + AutoDonutClient.version();
 		ui.round(vx, by - 6, ui.width(ver) + 8, 12, 3, t.surface());
 		ui.text(ver, vx + 4, by - 3, t.textMuted());
+		boolean online = offlineReason() == null;
+		String state = online ? "Online" : "Offline";
+		int sx = vx + ui.width(ver) + 14;
+		ui.circle(sx + 3, by, 2, online ? t.success() : t.danger());
+		ui.text(state, sx + 9, by - 3, online ? t.success() : t.danger());
 
 		// Sidebar
 		ui.fill(px + 1, py + TOP + 1, px + sw, py + ph - 4, t.sidebar());
@@ -766,6 +817,16 @@ public class AutoDonutScreen extends Screen {
 				}
 			}
 			case HOME -> {
+				String offline = offlineReason();
+				if (offline != null && bootStartedAt >= 0) {
+					drawBooting(x, top, w);
+					return;
+				}
+				if (offline != null) {
+					drawOffline(offline, x, top, w);
+					return;
+				}
+				if (revealAt >= 0) drawRevealSweep(x, top, w);
 				int ih = introHeight(w);
 				ui.round(x, top, w, ih, 3, t.surface());
 				ui.fill(x, top, x + 2, top + ih, t.accent());
@@ -777,6 +838,112 @@ public class AutoDonutScreen extends Screen {
 				ui.fill(x + ui.width("Features") + 6, top + ih + 13, x + w, top + ih + 14, t.border());
 			}
 			default -> { }
+		}
+	}
+
+	/** Why AutoDonut is offline, or null when it's running normally. */
+	private String offlineReason() {
+		if (Lockdown.active()) return Lockdown.reason();
+		if (cfg.onlyOnDonut && !ServerContext.isOnDonut()) {
+			return "Not connected to Donut SMP. AutoDonut only runs there (you can change this in Safety).";
+		}
+		return null;
+	}
+
+	/** Runs and draws the in-panel boot-up: same steps as on joining, one line at a time. */
+	private void drawBooting(int x, int top, int w) {
+		Theme t = ui.theme;
+		long elapsed = System.currentTimeMillis() - bootStartedAt;
+		int total = com.autodonut.client.BootSequence.stepCount();
+		while (bootResults.size() < total && elapsed >= (bootResults.size() + 1) * BOOT_STEP_MS) {
+			bootResults.add(com.autodonut.client.BootSequence.runStep(bootResults.size()));
+			UiSounds.slide(bootResults.size() / (float) total);
+		}
+		boolean allDone = bootResults.size() == total;
+		boolean failed = bootResults.stream().anyMatch(java.util.Objects::nonNull);
+
+		int boxH = failed && allDone ? 220 : 150;
+		ui.round(x, top, w, boxH, 3, t.surface());
+		ui.outline(x, top, w, boxH, 1, failed ? t.danger() : t.accent());
+		// Progress bar along the top edge
+		float progress = Math.min(1f, elapsed / (float) (BOOT_STEP_MS * (total + 1)));
+		ui.fill(x + 1, top + 1, x + 1 + Math.round((w - 2) * progress), top + 3, failed ? t.danger() : t.accent());
+
+		String dots = ".".repeat((int) ((elapsed / 300) % 4));
+		ui.textCentered("AutoDonut Booting Up" + (allDone ? "" : dots), x + w / 2, top + 14, t.text());
+		for (int i = 0; i < bootResults.size(); i++) {
+			var r = bootResults.get(i);
+			float fade = Anim.clamp01((elapsed - (i + 1) * BOOT_STEP_MS) / 220f);
+			float base = ui.alpha;
+			ui.alpha = base * fade;
+			String line = (r == null ? "\u2714 " : "\u2718 ") + com.autodonut.client.BootSequence.stepLabel(i);
+			ui.textCentered(line, x + w / 2, top + 34 + i * 12 + Math.round((1 - fade) * 4), r == null ? t.textMuted() : t.danger());
+			ui.alpha = base;
+		}
+		if (!allDone) return;
+
+		if (!failed) {
+			if (elapsed > BOOT_STEP_MS * (total + 1)) finishBoot();
+			return;
+		}
+		// Explain the first failure and offer to continue.
+		var f = bootResults.stream().filter(java.util.Objects::nonNull).findFirst().get();
+		int ey = top + 34 + total * 12 + 8;
+		ui.fill(x + 12, ey, x + w - 12, ey + 1, t.border());
+		int line = 0;
+		for (String l : ui.wrap("Why: " + f.reason(), w - 40)) {
+			ui.text(l, x + 20, ey + 8 + line++ * 10, t.textMuted());
+		}
+		for (String l : ui.wrap("Likely cause: " + f.cause(), w - 40)) {
+			ui.text(l, x + 20, ey + 8 + line++ * 10, Ui.WARNING);
+		}
+		if (!bootWaiting) {
+			bootWaiting = true;
+			rebuildPending = true;
+		}
+	}
+
+	/** Ends the lockdown and plays the reveal animation. */
+	private void finishBoot() {
+		Lockdown.bootUp();
+		bootStartedAt = -1;
+		bootWaiting = false;
+		revealAt = System.currentTimeMillis();
+		UiSounds.open();
+		rebuildPending = true;
+	}
+
+	/** A bright accent line sweeping down the content area right after boot-up. */
+	private void drawRevealSweep(int x, int top, int w) {
+		float t = (System.currentTimeMillis() - revealAt) / 650f;
+		if (t >= 1f) return;
+		int y = top + Math.round(Anim.easeOutCubic(t) * (py + ph - 10 - top));
+		float base = ui.alpha;
+		ui.alpha = base * (1f - t);
+		ui.fill(x, y, x + w, y + 1, ui.theme.accent());
+		ui.fill(x, y - 6, x + w, y, (ui.theme.accent() & 0x00FFFFFF) | 0x22000000);
+		ui.alpha = base;
+	}
+
+	private void drawOffline(String reason, int x, int top, int w) {
+		Theme t = ui.theme;
+		boolean locked = Lockdown.active();
+		ui.round(x, top, w, 150, 3, t.surface());
+		ui.outline(x, top, w, 150, 1, locked ? t.danger() : t.border());
+		ui.g.pose().pushMatrix();
+		ui.g.pose().translate(x + w / 2f, top + 18);
+		ui.g.pose().scale(2f);
+		ui.textCentered("Offline", 0, 0, locked ? t.danger() : t.textMuted());
+		ui.g.pose().popMatrix();
+		ui.textCentered(locked ? "Safety lockdown" : "Waiting for Donut SMP", x + w / 2, top + 42, t.text());
+		List<String> lines = ui.wrap(reason, w - 40);
+		for (int i = 0; i < Math.min(5, lines.size()); i++) {
+			ui.textCentered(lines.get(i), x + w / 2, top + 58 + i * 10, t.textMuted());
+		}
+		if (locked && !ServerContext.isOnDonut()) {
+			ui.textCentered("Join Donut SMP to boot AutoDonut up again.", x + w / 2, top + 122, t.textMuted());
+		} else if (locked) {
+			ui.textCentered("Auto Auction and Quick Sell stay off until you boot up.", x + w / 2, top + 142 - 0, t.textMuted());
 		}
 	}
 

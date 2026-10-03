@@ -46,6 +46,9 @@ public class AutoDonutConfig {
 	public boolean streamerMode = false;
 	/** Quick Sell: pressing R opens Donut's own sell screen for the held item. */
 	public boolean quickSellEnabled = true;
+	/** Safety lockdown: everything stays off until the player boots AutoDonut up again. */
+	public boolean lockdown = false;
+	public String lockdownReason = "";
 	/** Command sent by Quick Sell, without the slash. Donut then asks for the price itself. */
 	public String quickSellCommand = "ah sell";
 	/** 0 = Relaxed, 1 = Normal, 2 = Fast. Scales how quickly items are noticed and handled. */
@@ -114,6 +117,21 @@ public class AutoDonutConfig {
 		}
 		if (instance == null) instance = new AutoDonutConfig();
 		instance.sanitize();
+	}
+
+	/**
+	 * Checks that the settings file can be read, without replacing the settings in use.
+	 * Returns a problem description, or null when the file is fine (or doesn't exist yet).
+	 */
+	public static String check() {
+		Path path = path();
+		if (!Files.exists(path)) return null;
+		try (Reader reader = Files.newBufferedReader(path)) {
+			GSON.fromJson(reader, AutoDonutConfig.class);
+			return null;
+		} catch (IOException | RuntimeException e) {
+			return "autodonut.json couldn't be read (" + e.getClass().getSimpleName() + "). Defaults are being used.";
+		}
 	}
 
 	public static void save() {

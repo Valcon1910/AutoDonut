@@ -68,8 +68,10 @@ public class AutoDonutClient implements ClientModInitializer {
 					if (quickSellKey.matches(keyEvent) && QuickSell.allowedOn(s)) QuickSell.trigger(client);
 				}));
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+			Lockdown.onSystemMessage(message);
 			AutoAuctionController.get().onGameMessage(message, overlay);
 		});
+		ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, time) -> Lockdown.onChatMessage(message));
 		ClientPlayConnectionEvents.DISCONNECT.register((listener, client) -> {
 			ServerContext.onDisconnect();
 			AutoAuctionController.get().onDisconnect();
