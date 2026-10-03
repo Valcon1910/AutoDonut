@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "autodonut",
+	"version": "${version}",
+	"name": "AutoDonut",
+	"description": "AutoDonut Fabric mod.",
+	"authors": ["Valcon1910"],
+	"contact": {
+		"sources": "https://github.com/Valcon1910/AutoDonut"
+	},
+	"license": "MIT",
+	"icon": "assets/autodonut/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["com.autodonut.AutoDonut"],
+		"client": ["com.autodonut.client.AutoDonutClient"]
+	},
+	"mixins": [
+		"autodonut.mixins.json",
+		{ "config": "autodonut.client.mixins.json", "environment": "client" }
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
