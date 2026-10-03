@@ -257,14 +257,14 @@ public class AutoDonutScreen extends Screen {
 						new SettingRow("Only on Donut SMP", "Stay idle on every other server",
 								toggle(() -> cfg.onlyOnDonut, v -> cfg.onlyOnDonut = v), ToggleSwitch.WIDTH),
 						new SettingRow("Minimum delay", "Shortest wait between listings",
-								new Slider(3, 120, () -> cfg.minDelaySeconds, v -> {
+								new Slider(1, 120, () -> cfg.minDelaySeconds, v -> {
 									cfg.minDelaySeconds = v;
 									if (cfg.maxDelaySeconds < v) cfg.maxDelaySeconds = v;
 								}, v -> v + "s"), 110).warning(this::minDelayWarning),
 						new SettingRow("Maximum delay", "Longest wait between listings",
 								new Slider(5, 300, () -> cfg.maxDelaySeconds, v -> {
 									cfg.maxDelaySeconds = v;
-									if (cfg.minDelaySeconds > v) cfg.minDelaySeconds = Math.max(3, v);
+									if (cfg.minDelaySeconds > v) cfg.minDelaySeconds = Math.max(1, v);
 								}, v -> v + "s"), 110).warning(this::maxDelayWarning),
 						new SettingRow("Detection speed", "How quickly new items are noticed and listed",
 								new Segmented(new String[]{"Relaxed", "Normal", "Fast"}, () -> cfg.detectionSpeed, i -> {

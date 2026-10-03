@@ -33,6 +33,16 @@ public class AuctionRule {
 		return enabled && isComplete() && itemId.equals(stackItemId) && countMatches(count);
 	}
 
+	/**
+	 * How many items to split off an oversized stack of this rule's item, or 0. A stack bigger
+	 * than "Exactly N" (or the Custom maximum) gives N (or the maximum).
+	 */
+	public int splitAmount(String stackItemId, int count) {
+		if (!enabled || !isComplete() || !itemId.equals(stackItemId)) return 0;
+		int want = mode == QuantityMode.EXACTLY ? amount : max;
+		return count > want ? want : 0;
+	}
+
 	/** Total price for a stack of {@code count} items. */
 	public long totalPrice(int count) {
 		long p = price();

@@ -49,6 +49,15 @@ public class AutoDonutConfig {
 	/** Extra horizontal offset for the status label, added to the automatic position. */
 	public int hudOffset = 0;
 
+	/** Multiplier for the wait between listings (Fast lists noticeably sooner). */
+	public float listingDelayFactor() {
+		return switch (detectionSpeed) {
+			case 0 -> 1.3f;
+			case 2 -> 0.4f;
+			default -> 1f;
+		};
+	}
+
 	/** Multiplier for reaction and handling delays. */
 	public float speedFactor() {
 		return switch (detectionSpeed) {
@@ -119,7 +128,7 @@ public class AutoDonutConfig {
 		if (lightStyle == null) lightStyle = "Daylight";
 		if (accent == null) accent = "Donut Pink";
 		if (sellCommand == null || sellCommand.isBlank()) sellCommand = "ah sell {price}";
-		minDelaySeconds = Math.clamp(minDelaySeconds, 3, 120);
+		minDelaySeconds = Math.clamp(minDelaySeconds, 1, 120);
 		maxDelaySeconds = Math.clamp(maxDelaySeconds, minDelaySeconds, 300);
 		maxReactionSeconds = Math.clamp(maxReactionSeconds, 1, 15);
 		maxListingsPerHour = Math.clamp(maxListingsPerHour, 1, 60);

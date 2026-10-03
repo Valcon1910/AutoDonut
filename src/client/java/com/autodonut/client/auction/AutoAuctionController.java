@@ -49,7 +49,7 @@ public final class AutoAuctionController {
 			"limit", "maximum", "too many", "cannot", "can't", "not allowed", "cooldown", "invalid", "you must"
 	};
 
-	private enum Phase { IDLE, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, RESTORE }
+	private enum Phase { IDLE, SPLITTING, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, RESTORE }
 
 	/** How long to wait for a confirmation menu after sending the sell command. */
 	private static final long CONFIRM_WAIT_MS = 4000;
@@ -76,6 +76,14 @@ public final class AutoAuctionController {
 	/** Confirmation menu currently being handled; hidden from view when confirming in the background. */
 	private Screen confirmScreen;
 	private long combatUntil;
+	/** Set when the server reports the listing ("You listed ..."). */
+	private boolean serverConfirmed;
+	/** Total count per rule item last tick, to notice newly picked-up items. */
+	private final java.util.Map<String, Integer> lastCounts = new java.util.HashMap<>();
+	/** Pending inventory clicks for splitting a stack: {menuSlot, button}. */
+	private final ArrayDeque<int[]> splitClicks = new ArrayDeque<>();
+	private int splitTarget = -1;
+	private int splitAmount;
 
 	public static AutoAuctionController get() {
 		return INSTANCE;
@@ -111,6 +119,8 @@ public final class AutoAuctionController {
 
 	public void reset() {
 		confirmScreen = null;
+		splitClicks.clear();
+		splitTarget = -1;
 		phase = Phase.IDLE;
 		rule = null;
 		slot = -1;
@@ -179,6 +189,7 @@ public final class AutoAuctionController {
 
 		switch (phase) {
 			case IDLE -> tickIdle(player, cfg, now);
+			case SPLITTING -> tickSplitting(mc, player, now);
 			case REACTING -> tickReacting(mc, player, now);
 			case PRE_SEND -> tickPreSend(player, cfg, now);
 			case RESTORE -> tickRestore(mc, player, cfg, now);
@@ -192,11 +203,17 @@ public final class AutoAuctionController {
 			status = "Hourly limit reached, resumes in " + seconds(wait);
 			return;
 		}
+		Inventory inv = player.getInventory();
+		if (pickedUpNewItem(inv, cfg)) {
+			// A new matching item arrived: check it after a short reaction instead of waiting out the full delay.
+			long soon = Math.max(lastCommandAt + 1500, now + Math.round(humanizer.reaction(cfg.maxReactionSeconds) * cfg.speedFactor()));
+			nextAllowedAt = Math.min(nextAllowedAt, soon);
+		}
 		if (now < nextAllowedAt) {
 			status = "Next listing in " + seconds(nextAllowedAt - now);
 			return;
 		}
-		Inventory inv = player.getInventory();
+		// First choice: a stack that already matches a rule.
 		for (int i = 0; i < 36; i++) {
 			ItemStack stack = inv.getItem(i);
 			if (stack.isEmpty()) continue;
@@ -210,7 +227,116 @@ public final class AutoAuctionController {
 				return;
 			}
 		}
+		// Otherwise: a stack that is too big; split the wanted amount off it.
+		int empty = emptySlot(inv);
+		if (empty >= 0 && player.containerMenu == player.inventoryMenu) {
+			for (int i = 0; i < 36; i++) {
+				ItemStack stack = inv.getItem(i);
+				if (stack.isEmpty()) continue;
+				for (AuctionRule r : cfg.rules) {
+					Long until = rulePausedUntil.get(r);
+					if (until != null && now < until) continue;
+					int want = r.splitAmount(ItemIndex.idOf(stack.getItem()), stack.getCount());
+					if (want > 0) {
+						startSplit(r, i, empty, want, stack.getCount(), now);
+						status = "Splitting " + want + " " + stack.getHoverName().getString();
+						return;
+					}
+				}
+			}
+		}
 		status = "Watching inventory";
+	}
+
+	/** True when the total of any rule item went up since the last check. */
+	private boolean pickedUpNewItem(Inventory inv, AutoDonutConfig cfg) {
+		java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+		for (AuctionRule r : cfg.rules) {
+			if (r.enabled && !r.itemId.isEmpty()) counts.put(r.itemId, 0);
+		}
+		for (int i = 0; i < 36; i++) {
+			ItemStack stack = inv.getItem(i);
+			if (stack.isEmpty()) continue;
+			String id = ItemIndex.idOf(stack.getItem());
+			counts.computeIfPresent(id, (k, v) -> v + stack.getCount());
+		}
+		boolean increased = false;
+		for (var e : counts.entrySet()) {
+			Integer before = lastCounts.get(e.getKey());
+			if (before != null && e.getValue() > before) increased = true;
+		}
+		lastCounts.clear();
+		lastCounts.putAll(counts);
+		return increased;
+	}
+
+	/** Prefer an empty hotbar slot, then any empty main-inventory slot. */
+	private static int emptySlot(Inventory inv) {
+		int hotbar = emptyHotbarSlot(inv);
+		if (hotbar >= 0) return hotbar;
+		for (int i = 9; i < 36; i++) {
+			if (inv.getItem(i).isEmpty()) return i;
+		}
+		return -1;
+	}
+
+	/** Inventory index (0-35) to the slot number in the player's inventory menu. */
+	private static int menuSlot(int inventoryIndex) {
+		return inventoryIndex < 9 ? 36 + inventoryIndex : inventoryIndex;
+	}
+
+	/**
+	 * Splits {@code amount} items off a stack the same way a player would: pick the stack up,
+	 * right-click one item at a time into the empty slot, then put the rest back.
+	 */
+	private void startSplit(AuctionRule r, int from, int to, int amount, int count, long now) {
+		rule = r;
+		splitTarget = to;
+		splitAmount = amount;
+		splitClicks.clear();
+		int src = menuSlot(from);
+		int dst = menuSlot(to);
+		if (amount * 2 == count) {
+			// Exactly half: right-click picks up half in one go.
+			splitClicks.add(new int[]{src, 1});
+			splitClicks.add(new int[]{dst, 0});
+		} else {
+			splitClicks.add(new int[]{src, 0});
+			for (int i = 0; i < amount; i++) splitClicks.add(new int[]{dst, 1});
+			splitClicks.add(new int[]{src, 0});
+		}
+		phase = Phase.SPLITTING;
+		phaseUntil = now + Math.round(humanizer.reaction(AutoDonutConfig.get().maxReactionSeconds) * AutoDonutConfig.get().speedFactor());
+	}
+
+	private void tickSplitting(Minecraft mc, LocalPlayer player, long now) {
+		if (now < phaseUntil) return;
+		if (player.containerMenu != player.inventoryMenu) {
+			reset();
+			return;
+		}
+		// A few clicks per tick, like fast right-clicking.
+		int burst = 1 + (int) (Math.random() * 3);
+		for (int i = 0; i < burst && !splitClicks.isEmpty(); i++) {
+			int[] click = splitClicks.poll();
+			if (!InventoryActions.click(mc, player.inventoryMenu.containerId, click[0], click[1])) {
+				fail("Couldn't split the stack");
+				return;
+			}
+		}
+		if (!splitClicks.isEmpty()) {
+			phaseUntil = now + Math.round(humanizer.between(40, 110) * AutoDonutConfig.get().speedFactor());
+			return;
+		}
+		ItemStack made = player.getInventory().getItem(splitTarget);
+		if (made.getCount() != splitAmount || !stillMatches(made)) {
+			reset();
+			return;
+		}
+		slot = splitTarget;
+		splitTarget = -1;
+		phase = Phase.REACTING;
+		phaseUntil = now + Math.round(humanizer.handling() * AutoDonutConfig.get().speedFactor());
 	}
 
 	private void tickReacting(Minecraft mc, LocalPlayer player, long now) {
@@ -255,9 +381,7 @@ public final class AutoAuctionController {
 		recentListings.addLast(now);
 		listedThisSession++;
 
-		if (!Compat.streamerMode()) player.sendSystemMessage(prefix().append(Component.literal("Listed " + held.getHoverName().getString()
-				+ " x" + held.getCount() + " for " + PriceFormat.format(total)).withStyle(ChatFormatting.GRAY)));
-
+		serverConfirmed = false;
 		if (cfg.autoConfirm) {
 			phase = Phase.AWAIT_CONFIRM;
 			phaseUntil = now + CONFIRM_WAIT_MS;
@@ -376,6 +500,8 @@ public final class AutoAuctionController {
 
 	private void tickRestore(Minecraft mc, LocalPlayer player, AutoDonutConfig cfg, long now) {
 		if (now < phaseUntil) return;
+		// Give the server a few seconds to report the listing before judging it.
+		if (!serverConfirmed && now - lastCommandAt < 4000) return;
 		// Close a confirmation menu the server left open.
 		if (confirmScreen != null && mc.gui.screen() == confirmScreen) {
 			if (confirmScreen instanceof AbstractContainerScreen<?>) player.closeContainer();
@@ -386,7 +512,8 @@ public final class AutoAuctionController {
 		ItemStack held = player.getMainHandItem();
 
 		// If the exact stack is still in hand, the server most likely refused the listing.
-		boolean unchanged = !held.isEmpty() && ItemIndex.idOf(held.getItem()).equals(listedItemId) && held.getCount() == listedCount;
+		boolean unchanged = !serverConfirmed && !held.isEmpty()
+				&& ItemIndex.idOf(held.getItem()).equals(listedItemId) && held.getCount() == listedCount;
 		if (unchanged) {
 			int count = failures.merge(rule, 1, Integer::sum);
 			if (count >= 2) {
@@ -402,7 +529,8 @@ public final class AutoAuctionController {
 		if (previousSelected >= 0 && previousSelected != inv.getSelectedSlot()) {
 			inv.setSelectedSlot(previousSelected);
 		}
-		nextAllowedAt = now + humanizer.nextListingDelay(cfg.minDelaySeconds, cfg.maxDelaySeconds, cfg.randomBreaks);
+		nextAllowedAt = now + Math.round(humanizer.nextListingDelay(cfg.minDelaySeconds, cfg.maxDelaySeconds, cfg.randomBreaks)
+				* cfg.listingDelayFactor());
 		reset();
 	}
 
@@ -421,6 +549,11 @@ public final class AutoAuctionController {
 		}
 		if (overlay) return;
 		if (lastCommandAt == 0 || now - lastCommandAt > 6000) return;
+		if (lower.contains("you listed") || lower.contains("listed for") || lower.contains("put up for auction")) {
+			serverConfirmed = true;
+			if (rule != null) failures.remove(rule);
+			return;
+		}
 		String text = message.getString().toLowerCase(Locale.ROOT);
 		for (String word : REFUSAL_WORDS) {
 			if (text.contains(word)) {

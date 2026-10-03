@@ -38,6 +38,16 @@ public final class InventoryActions {
 	 */
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	private static boolean click(Minecraft mc, int containerId, int slot, int button, String type) {
+		return clickRaw(mc, containerId, slot, button, type);
+	}
+
+	/** Normal click (button 0 = left, 1 = right) on a slot of the given container. */
+	public static boolean click(Minecraft mc, int containerId, int slot, int button) {
+		return clickRaw(mc, containerId, slot, button, "PICKUP");
+	}
+
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	private static boolean clickRaw(Minecraft mc, int containerId, int slot, int button, String type) {
 		LocalPlayer player = mc.player;
 		if (player == null || mc.gameMode == null || !lookup(mc)) return false;
 		try {
