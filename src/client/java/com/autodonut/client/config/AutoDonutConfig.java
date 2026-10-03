@@ -44,6 +44,10 @@ public class AutoDonutConfig {
 	public boolean autoConfirm = true;
 	public boolean confirmInBackground = true;
 	public boolean streamerMode = false;
+	/** Quick Sell: pressing R opens Donut's own sell screen for the held item. */
+	public boolean quickSellEnabled = true;
+	/** Command sent by Quick Sell, without the slash. Donut then asks for the price itself. */
+	public String quickSellCommand = "ah sell";
 	/** 0 = Relaxed, 1 = Normal, 2 = Fast. Scales how quickly items are noticed and handled. */
 	public int detectionSpeed = 1;
 	/** Extra horizontal offset for the status label, added to the automatic position. */
@@ -133,6 +137,7 @@ public class AutoDonutConfig {
 		if (lightStyle == null) lightStyle = "Daylight";
 		if (accent == null) accent = "Donut Pink";
 		if (sellCommand == null || sellCommand.isBlank()) sellCommand = "ah sell {price}";
+		if (quickSellCommand == null || quickSellCommand.isBlank()) quickSellCommand = "ah sell";
 		minDelaySeconds = Math.clamp(minDelaySeconds, 1, 120);
 		maxDelaySeconds = Math.clamp(maxDelaySeconds, minDelaySeconds, 300);
 		maxReactionSeconds = Math.clamp(maxReactionSeconds, 1, 15);

@@ -210,6 +210,11 @@ public class AutoDonutScreen extends Screen {
 									cfg.setAutoAuction(v);
 									AutoDonutConfig.save();
 								}, () -> setPage(Page.AUCTION)),
+						new FeatureCard(new ItemStack(Items.GOLD_INGOT), "Quick Sell", "Press R to open Donut's sell screen for the held item",
+								() -> "Key: R", () -> cfg.quickSellEnabled, v -> {
+									cfg.quickSellEnabled = v;
+									AutoDonutConfig.save();
+								}, null),
 						new FeatureCard(new ItemStack(Items.SPYGLASS), "HUD Status", "Small status label while Auto Auction runs",
 								() -> "", () -> cfg.showHud, v -> {
 									cfg.showHud = v;
@@ -228,10 +233,11 @@ public class AutoDonutScreen extends Screen {
 				);
 				int introH = introHeight(w);
 				int cardsTop = top + introH + 22;
-				int cols = w >= 240 ? 2 : 1;
+				int cols = w >= 380 ? 3 : w >= 240 ? 2 : 1;
 				int gap = 8;
 				int cw = (w - gap * (cols - 1)) / cols;
-				int ch = Math.min(72, (py + ph - 8 - cardsTop - gap) / 2);
+				int rows = (cards.size() + cols - 1) / cols;
+				int ch = Math.min(72, (py + ph - 8 - cardsTop - gap * (rows - 1)) / rows);
 				for (int i = 0; i < cards.size(); i++) {
 					cards.get(i).bounds(x + (i % cols) * (cw + gap), cardsTop + (i / cols) * (ch + gap), cw, ch);
 					widgets.add(cards.get(i));

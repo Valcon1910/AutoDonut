@@ -23,6 +23,7 @@ import com.autodonut.client.ui.StatusHud;
 public class AutoDonutClient implements ClientModInitializer {
 	private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(id("main"));
 	private static KeyMapping openKey;
+	private static KeyMapping quickSellKey;
 	private static String version = "dev";
 
 	public static Identifier id(String path) {
@@ -51,6 +52,13 @@ public class AutoDonutClient implements ClientModInitializer {
 				CATEGORY
 		));
 
+		quickSellKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+				"key.autodonut.quick_sell",
+				InputConstants.Type.KEYBOARD,
+				InputConstants.KEY_R,
+				CATEGORY
+		));
+
 		ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			AutoAuctionController.get().onGameMessage(message, overlay);
@@ -67,6 +75,9 @@ public class AutoDonutClient implements ClientModInitializer {
 			if (client.gui.screen() == null) {
 				client.gui.setScreen(new AutoDonutScreen());
 			}
+		}
+		while (quickSellKey.consumeClick()) {
+			if (client.gui.screen() == null) QuickSell.trigger(client);
 		}
 		AutoAuctionController.get().tick(client);
 		BootSequence.tick(client);
