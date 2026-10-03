@@ -1,5 +1,7 @@
 package com.autodonut.client.ui.widget;
 
+import java.util.function.Supplier;
+
 import net.minecraft.client.input.KeyEvent;
 
 import com.autodonut.client.ui.Anim;
@@ -11,12 +13,19 @@ public class SettingRow extends Widget {
 	private final String hint;
 	private final Widget control;
 	private final int controlWidth;
+	private Supplier<String> warning = () -> null;
 
 	public SettingRow(String title, String hint, Widget control, int controlWidth) {
 		this.title = title;
 		this.hint = hint;
 		this.control = control;
 		this.controlWidth = controlWidth;
+	}
+
+	/** Shows a warning icon after the title while the supplier returns text; hovering it shows the text. */
+	public SettingRow warning(Supplier<String> warning) {
+		this.warning = warning;
+		return this;
 	}
 
 	@Override
@@ -37,7 +46,18 @@ public class SettingRow extends Widget {
 		int textW = w - controlWidth - 24;
 		boolean twoLines = !hint.isEmpty() && h >= 22;
 		int ty = twoLines ? y + h / 2 - ui.lineHeight() + 1 : y + (h - ui.lineHeight()) / 2 + 1;
-		ui.text(ui.trim(title, textW), x + 8, ty, ui.theme.text());
+		String shownTitle = ui.trim(title, textW - 14);
+		ui.text(shownTitle, x + 8, ty, ui.theme.text());
+		String warn = warning.get();
+		if (warn != null) {
+			int ix = x + 8 + ui.width(shownTitle) + 3;
+			ui.warningIcon(ix, ty);
+			if (mx >= ix - 2 && mx < ix + 11 && my >= ty - 2 && my < ty + 10) {
+				ui.tooltip = warn;
+				ui.tooltipX = mx;
+				ui.tooltipY = my;
+			}
+		}
 		if (twoLines) {
 			ui.text(ui.trim(hint, textW), x + 8, ty + ui.lineHeight() + 1, ui.theme.textMuted());
 		}

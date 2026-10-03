@@ -249,12 +249,12 @@ public class AutoDonutScreen extends Screen {
 								new Slider(3, 120, () -> cfg.minDelaySeconds, v -> {
 									cfg.minDelaySeconds = v;
 									if (cfg.maxDelaySeconds < v) cfg.maxDelaySeconds = v;
-								}, v -> v + "s"), 110),
+								}, v -> v + "s"), 110).warning(this::minDelayWarning),
 						new SettingRow("Maximum delay", "Longest wait between listings",
 								new Slider(5, 300, () -> cfg.maxDelaySeconds, v -> {
 									cfg.maxDelaySeconds = v;
 									if (cfg.minDelaySeconds > v) cfg.minDelaySeconds = Math.max(3, v);
-								}, v -> v + "s"), 110),
+								}, v -> v + "s"), 110).warning(this::maxDelayWarning),
 						new SettingRow("Reaction time", "Max wait after picking up an item",
 								new Slider(1, 15, () -> cfg.maxReactionSeconds, v -> cfg.maxReactionSeconds = v, v -> v + "s"), 110),
 						new SettingRow("Listings per hour", "Hard cap, resets on a rolling hour",
@@ -277,6 +277,26 @@ public class AutoDonutScreen extends Screen {
 			case APPEARANCE -> buildAppearance(x, w, top);
 			case EDIT -> buildEditor(x, w, top);
 		}
+	}
+
+	private String minDelayWarning() {
+		if (cfg.minDelaySeconds < 8) {
+			return "Very short minimum delay. Listing every few seconds is much faster than a person "
+					+ "would, and is the easiest pattern for staff or anti-cheat to notice. 8s or more is safer.";
+		}
+		return null;
+	}
+
+	private String maxDelayWarning() {
+		if (cfg.maxDelaySeconds < 15) {
+			return "Very short maximum delay. Every listing happens within " + cfg.maxDelaySeconds
+					+ "s of the last one, which looks automated. 20s or more is safer.";
+		}
+		if (cfg.maxDelaySeconds - cfg.minDelaySeconds < 6) {
+			return "Minimum and maximum are almost the same, so listings happen on a near-fixed rhythm. "
+					+ "Leave at least 6s between them so the timing stays irregular.";
+		}
+		return null;
 	}
 
 	private ToggleSwitch toggle(java.util.function.BooleanSupplier get, java.util.function.Consumer<Boolean> set) {
@@ -520,6 +540,8 @@ public class AutoDonutScreen extends Screen {
 			}
 		}
 		if (resultsVisible()) drawResults(mouseX, mouseY);
+		ui.alpha = openProgress;
+		ui.drawTooltip(px + 4, py + 4, px + pw - 4, py + ph - 4);
 		graphics.pose().popMatrix();
 
 		graphics.pose().popMatrix();

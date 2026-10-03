@@ -20,6 +20,41 @@ public final class Ui {
 	public Theme theme = Theme.of(Theme.DARK_BASES.get(0), Theme.ACCENTS.get(0));
 	public float alpha = 1f;
 	public float dt;
+	/** Tooltip requested this frame; drawn on top by the screen, then cleared. */
+	public String tooltip;
+	public int tooltipX, tooltipY;
+
+	public static final int WARNING = 0xFFF5A524;
+
+	/** Amber warning triangle with an exclamation mark, 9x8 pixels. */
+	public void warningIcon(int x, int y) {
+		for (int i = 0; i < 8; i++) {
+			int half = i / 2 + (i > 0 ? 1 : 0);
+			fill(x + 4 - half, y + i, x + 5 + half, y + i + 1, WARNING);
+		}
+		fill(x + 4, y + 2, x + 5, y + 5, 0xFF1A1A1A);
+		fill(x + 4, y + 6, x + 5, y + 7, 0xFF1A1A1A);
+	}
+
+	/** Draws the pending tooltip inside the given bounds. */
+	public void drawTooltip(int minX, int minY, int maxX, int maxY) {
+		if (tooltip == null) return;
+		java.util.List<String> lines = wrap(tooltip, 170);
+		int w = 0;
+		for (String l : lines) w = Math.max(w, width(l));
+		w += 14;
+		int h = lines.size() * 10 + 8;
+		int x = Math.min(tooltipX + 8, maxX - w);
+		int y = tooltipY + 10;
+		if (y + h > maxY) y = tooltipY - h - 4;
+		x = Math.max(minX, x);
+		y = Math.max(minY, y);
+		round(x + 1, y + 2, w, h, 3, 0x55000000);
+		card(x, y, w, h, 3, theme.surface(), WARNING);
+		fill(x + 1, y + 2, x + 3, y + h - 2, WARNING);
+		for (int i = 0; i < lines.size(); i++) text(lines.get(i), x + 8, y + 5 + i * 10, theme.text());
+		tooltip = null;
+	}
 
 	public int c(int argb) {
 		int a = Math.round((argb >>> 24) * Anim.clamp01(alpha));
