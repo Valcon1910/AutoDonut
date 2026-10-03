@@ -61,6 +61,8 @@ public class AutoDonutScreen extends Screen {
 	private final Anim pageAnim = new Anim(1, 11);
 	private final Anim closeHover = new Anim(0, 16);
 	private final Anim[] navHover = new Anim[NAV.length];
+	/** Per sidebar section: 1 = expanded, 0 = collapsed. Only section indices are used. */
+	private final Anim[] sectionOpen = new Anim[NAV.length];
 	private final List<Widget> widgets = new ArrayList<>();
 	private final List<Widget> chrome = new ArrayList<>();
 
@@ -76,11 +78,17 @@ public class AutoDonutScreen extends Screen {
 	private int resultScroll;
 
 	private int px, py, pw, ph, sw;
+	/** The panel is drawn at its own pixel-perfect scale so huge GUI scales don't cramp it. */
+	private float uiScale = 1f;
+	private int vw, vh;
 
 	public AutoDonutScreen() {
 		super(Component.literal("AutoDonut"));
 		themeAnim = new Anim(cfg.darkMode ? 0 : 1, 7);
-		for (int i = 0; i < navHover.length; i++) navHover[i] = new Anim(0, 16);
+		for (int i = 0; i < navHover.length; i++) {
+			navHover[i] = new Anim(0, 16);
+			sectionOpen[i] = new Anim(1, 14);
+		}
 	}
 
 	// ---------------------------------------------------------------- layout
@@ -88,13 +96,28 @@ public class AutoDonutScreen extends Screen {
 	@Override
 	protected void init() {
 		ui.font = font;
-		pw = Math.min(520, width - 16);
-		ph = Math.min(330, height - 16);
-		px = (width - pw) / 2;
-		py = (height - ph) / 2;
+		computeScale();
+		pw = Math.min(560, vw - 16);
+		ph = Math.min(340, vh - 16);
+		px = (vw - pw) / 2;
+		py = (vh - ph) / 2;
 		sw = Math.max(90, Math.min(120, Math.round(pw * 0.24f)));
 		buildChrome();
 		buildPage();
+	}
+
+	/**
+	 * Picks the largest whole-number pixel scale (<= the game's GUI scale) that still gives the
+	 * panel at least 560x340 units, then expresses it relative to the GUI scale.
+	 */
+	private void computeScale() {
+		int fbW = minecraft.getWindow().getWidth();
+		int fbH = minecraft.getWindow().getHeight();
+		int guiScale = Math.max(1, Math.round(fbW / (float) width));
+		int n = Math.max(1, Math.min(guiScale, Math.min(fbW / 576, fbH / 356)));
+		uiScale = n / (float) guiScale;
+		vw = Math.round(width / uiScale);
+		vh = Math.round(height / uiScale);
 	}
 
 	private int contentX() {
@@ -110,10 +133,24 @@ public class AutoDonutScreen extends Screen {
 		return py + TOP + 42;
 	}
 
+	private int sectionOf(int index) {
+		for (int i = index; i >= 0; i--) {
+			if (NAV[i].page() == null) return i;
+		}
+		return 0;
+	}
+
+	/** How expanded the section containing this entry is (always 1 for headers). */
+	private float navOpenness(int index) {
+		return NAV[index].page() == null ? 1f : Anim.easeInOut(sectionOpen[sectionOf(index)].get());
+	}
+
 	private int navY(int index) {
-		int y = py + TOP + 8;
-		for (int i = 0; i < index; i++) y += NAV[i].page() == null ? NAV_SECTION_H : NAV_ITEM_H + 2;
-		return y;
+		float y = py + TOP + 8;
+		for (int i = 0; i < index; i++) {
+			y += NAV[i].page() == null ? NAV_SECTION_H + 2 : (NAV_ITEM_H + 2) * navOpenness(i);
+		}
+		return Math.round(y);
 	}
 
 	private int closeX() {
@@ -151,11 +188,6 @@ public class AutoDonutScreen extends Screen {
 									cfg.autoAuctionEnabled = v;
 									AutoDonutConfig.save();
 								}, () -> setPage(Page.AUCTION)),
-						new FeatureCard("Boot Message", "\"AutoDonut Booting Up\" when joining",
-								() -> "donutsmp.net", () -> cfg.bootMessage, v -> {
-									cfg.bootMessage = v;
-									AutoDonutConfig.save();
-								}, null),
 						new FeatureCard("HUD Status", "Corner pill while Auto Auction runs",
 								() -> "", () -> cfg.showHud, v -> {
 									cfg.showHud = v;
@@ -167,13 +199,14 @@ public class AutoDonutScreen extends Screen {
 									AutoDonutConfig.save();
 								}, () -> setPage(Page.SAFETY))
 				);
-				int cols = w >= 260 ? 2 : 1;
-				int gap = 6;
+				int introH = introHeight(w);
+				int cardsTop = top + introH + 22;
+				int cols = w >= 360 ? cards.size() : w >= 240 ? 2 : 1;
+				int gap = 8;
 				int cw = (w - gap * (cols - 1)) / cols;
-				int rows = (cards.size() + cols - 1) / cols;
-				int ch = Math.max(40, Math.min(58, (py + ph - 8 - top - gap * (rows - 1)) / rows));
+				int ch = 66;
 				for (int i = 0; i < cards.size(); i++) {
-					cards.get(i).bounds(x + (i % cols) * (cw + gap), top + (i / cols) * (ch + gap), cw, ch);
+					cards.get(i).bounds(x + (i % cols) * (cw + gap), cardsTop + (i / cols) * (ch + gap), cw, ch);
 					widgets.add(cards.get(i));
 				}
 			}
@@ -339,7 +372,10 @@ public class AutoDonutScreen extends Screen {
 		float scale = 0.94f + 0.06f * openProgress;
 		float cx = px + pw / 2f;
 		float cy = py + ph / 2f;
+		mouseX = Math.round(mouseX / uiScale);
+		mouseY = Math.round(mouseY / uiScale);
 		graphics.pose().pushMatrix();
+		graphics.pose().scale(uiScale);
 		graphics.pose().translate(cx, cy + (1f - openProgress) * 6f);
 		graphics.pose().scale(scale);
 		graphics.pose().translate(-cx, -cy);
@@ -377,38 +413,58 @@ public class AutoDonutScreen extends Screen {
 		ui.round(px + 1, py + 1, pw - 2, TOP, 3, t.sidebar());
 		ui.fill(px + 1, py + TOP - 3, px + pw - 1, py + TOP, t.sidebar());
 		ui.fill(px + 1, py + TOP, px + pw - 1, py + TOP + 1, t.border());
-		int bx = px + 15, by = py + TOP / 2;
-		ui.circle(bx, by, 7, t.accent());
-		ui.circle(bx, by, 5, Anim.lerpColor(t.accent(), 0xFFFFFFFF, 0.25f));
-		ui.circle(bx, by, 2, t.sidebar());
-		ui.text("AUTODONUT", px + 27, by - 3, t.accent());
-		ui.text("AUTODONUT", px + 28, by - 3, t.accent());
-		ui.text("v" + AutoDonutClient.version(), px + 34 + ui.width("AUTODONUT"), by - 3, t.textMuted());
+		int by = py + TOP / 2;
+		ui.logo(px + 8, by - 9, 18);
+		ui.bold("Auto", px + 31, by - 4, t.text());
+		ui.bold("Donut", px + 31 + ui.boldWidth("Auto"), by - 4, t.accent());
+		int vx = px + 31 + ui.boldWidth("AutoDonut") + 6;
+		String ver = "v" + AutoDonutClient.version();
+		ui.round(vx, by - 6, ui.width(ver) + 8, 12, 3, t.surface());
+		ui.text(ver, vx + 4, by - 3, t.textMuted());
 
 		// Sidebar
 		ui.fill(px + 1, py + TOP + 1, px + sw, py + ph - 4, t.sidebar());
 		ui.round(px + 1, py + ph - 8, sw - 1, 7, 3, t.sidebar());
 		ui.fill(px + sw, py + TOP + 1, px + sw + 1, py + ph - 1, t.border());
 
+		for (Anim a : sectionOpen) a.update(ui.dt);
 		int active = activeNavIndex();
+		float activeOpen = navOpenness(active);
 		navAnim.set(navY(active));
 		if (navAnim.get() == 0) navAnim.snap(navY(active));
 		int hy = Math.round(navAnim.update(ui.dt));
+		float baseAlpha = ui.alpha;
+		ui.alpha = baseAlpha * activeOpen;
 		ui.round(px + 5, hy, sw - 10, NAV_ITEM_H, 2, Anim.lerpColor(t.sidebar(), t.accent(), 0.10f));
 		ui.outline(px + 5, hy, sw - 10, NAV_ITEM_H, 1, t.accent());
+		ui.alpha = baseAlpha;
 
 		for (int i = 0; i < NAV.length; i++) {
 			NavEntry entry = NAV[i];
 			int iy = navY(i);
 			if (entry.page() == null) {
-				// Section header with a small down-arrow
-				int ay = iy + 4;
-				ui.fill(px + 9, ay, px + 14, ay + 1, t.textMuted());
-				ui.fill(px + 10, ay + 1, px + 13, ay + 2, t.textMuted());
-				ui.fill(px + 11, ay + 2, px + 12, ay + 3, t.textMuted());
-				ui.text(entry.label(), px + 17, iy + 2, t.textMuted());
+				// Clickable section header with an arrow: down when open, right when collapsed
+				boolean overHeader = mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_SECTION_H;
+				navHover[i].set(overHeader ? 1 : 0);
+				navHover[i].update(ui.dt);
+				int hc = Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
+				boolean open = sectionOpen[i].target() > 0.5f;
+				int ax = px + 9, ay = iy + 3;
+				if (open) {
+					ui.fill(ax, ay + 1, ax + 5, ay + 2, hc);
+					ui.fill(ax + 1, ay + 2, ax + 4, ay + 3, hc);
+					ui.fill(ax + 2, ay + 3, ax + 3, ay + 4, hc);
+				} else {
+					ui.fill(ax + 1, ay, ax + 2, ay + 5, hc);
+					ui.fill(ax + 2, ay + 1, ax + 3, ay + 4, hc);
+					ui.fill(ax + 3, ay + 2, ax + 4, ay + 3, hc);
+				}
+				ui.text(entry.label(), px + 17, iy + 2, hc);
 				continue;
 			}
+			float open = navOpenness(i);
+			if (open < 0.05f) continue;
+			ui.alpha = baseAlpha * open;
 			boolean hovered = i != active && mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H;
 			navHover[i].set(hovered ? 1 : 0);
 			navHover[i].update(ui.dt);
@@ -417,6 +473,7 @@ public class AutoDonutScreen extends Screen {
 			if (entry.page() == Page.AUCTION) {
 				ui.circle(px + sw - 14, iy + 9, 2, AutoAuctionController.get().isActive() ? t.success() : t.track());
 			}
+			ui.alpha = baseAlpha;
 		}
 
 		boolean donut = ServerContext.isOnDonut();
@@ -452,7 +509,7 @@ public class AutoDonutScreen extends Screen {
 			case EDIT -> "Edit item";
 		};
 		String subtitle = switch (page) {
-			case HOME -> "Turn each AutoDonut feature on or off. Click a card to open its settings.";
+			case HOME -> "Your Donut SMP companion.";
 			case AUCTION -> "Pick items to sell. Matching stacks are listed on /ah automatically.";
 			case SAFETY -> "Pacing that keeps every action irregular and human.";
 			case EDIT -> "Choose the item, its price and which stack sizes to sell.";
@@ -498,8 +555,28 @@ public class AutoDonutScreen extends Screen {
 				}
 				drawPreview(rule, entry, x, top + 114, w);
 			}
+			case HOME -> {
+				int ih = introHeight(w);
+				ui.round(x, top, w, ih, 3, t.surface());
+				ui.fill(x, top, x + 2, top + ih, t.accent());
+				List<String> lines = ui.wrap(INTRO, w - 20);
+				for (int i = 0; i < lines.size(); i++) {
+					ui.text(lines.get(i), x + 10, top + 7 + i * 10, i == 0 ? t.text() : t.textMuted());
+				}
+				ui.text("FEATURES", x, top + ih + 9, t.textMuted());
+				ui.fill(x + ui.width("FEATURES") + 6, top + ih + 13, x + w, top + ih + 14, t.border());
+			}
 			default -> { }
 		}
+	}
+
+	private static final String INTRO = "AutoDonut is a client-side helper for Donut SMP. It handles repetitive jobs, "
+			+ "like listing items on the auction house, quietly in the background with randomised, human-like timing. "
+			+ "Nothing is installed on the server. Switch each feature on or off below, or open it from the sidebar to "
+			+ "change its settings.";
+
+	private int introHeight(int w) {
+		return ui.wrap(INTRO, w - 20).size() * 10 + 14;
 	}
 
 	private void drawPreview(AuctionRule rule, ItemIndex.Entry entry, int x, int y, int w) {
@@ -565,8 +642,8 @@ public class AutoDonutScreen extends Screen {
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
 		if (inputBlocked()) return true;
-		double mx = event.x();
-		double my = event.y();
+		double mx = event.x() / uiScale;
+		double my = event.y() / uiScale;
 
 		if (resultsVisible()) {
 			int x = searchField.x;
@@ -587,8 +664,15 @@ public class AutoDonutScreen extends Screen {
 		}
 		// Navigation
 		for (int i = 0; i < NAV.length; i++) {
-			if (NAV[i].page() == null) continue;
 			int iy = navY(i);
+			if (NAV[i].page() == null) {
+				if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_SECTION_H) {
+					sectionOpen[i].set(sectionOpen[i].target() > 0.5f ? 0 : 1);
+					return true;
+				}
+				continue;
+			}
+			if (sectionOpen[sectionOf(i)].target() < 0.5f) continue;
 			if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H) {
 				if (NAV[i].page() != page) setPage(NAV[i].page());
 				return true;
@@ -615,19 +699,21 @@ public class AutoDonutScreen extends Screen {
 
 	@Override
 	public boolean mouseReleased(MouseButtonEvent event) {
-		for (Widget w : widgets) w.mouseReleased(event.x(), event.y());
+		for (Widget w : widgets) w.mouseReleased(event.x() / uiScale, event.y() / uiScale);
 		return true;
 	}
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-		for (Widget w : widgets) w.mouseDragged(event.x(), event.y());
+		for (Widget w : widgets) w.mouseDragged(event.x() / uiScale, event.y() / uiScale);
 		return true;
 	}
 
 	@Override
-	public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+	public boolean mouseScrolled(double rawX, double rawY, double scrollX, double scrollY) {
 		if (inputBlocked()) return true;
+		double mx = rawX / uiScale;
+		double my = rawY / uiScale;
 		if (resultsVisible()) {
 			int max = Math.max(0, results.size() - MAX_RESULTS_SHOWN);
 			resultScroll = Math.max(0, Math.min(max, resultScroll - (int) Math.signum(scrollY)));

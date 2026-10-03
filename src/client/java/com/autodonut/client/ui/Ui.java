@@ -1,11 +1,20 @@
 package com.autodonut.client.ui;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 /** Per-frame drawing context: shapes, text and the current theme, all faded by {@link #alpha}. */
 public final class Ui {
+	private static final Identifier LOGO = Identifier.fromNamespaceAndPath("autodonut", "logo.png");
+
 	public GuiGraphicsExtractor g;
 	public Font font;
 	public Theme theme = Theme.DARK;
@@ -90,6 +99,37 @@ public final class Ui {
 	public void text(String s, int x, int y, int color) {
 		if (alpha < 0.04f || s.isEmpty()) return;
 		g.text(font, s, x, y, c(color), false);
+	}
+
+	public void bold(String s, int x, int y, int color) {
+		if (alpha < 0.04f || s.isEmpty()) return;
+		g.text(font, Component.literal(s).withStyle(ChatFormatting.BOLD), x, y, c(color));
+	}
+
+	public int boldWidth(String s) {
+		return font.width(Component.literal(s).withStyle(ChatFormatting.BOLD));
+	}
+
+	/** The mod icon, drawn from assets/autodonut/icon.png. */
+	public void logo(int x, int y, int size) {
+		if (alpha > 0.6f) g.blit(RenderPipelines.GUI_TEXTURED, LOGO, x, y, 0, 0, size, size, 128, 128, 128, 128);
+	}
+
+	/** Greedy word wrap. */
+	public List<String> wrap(String text, int maxWidth) {
+		List<String> lines = new ArrayList<>();
+		StringBuilder line = new StringBuilder();
+		for (String word : text.split(" ")) {
+			String candidate = line.isEmpty() ? word : line + " " + word;
+			if (width(candidate) > maxWidth && !line.isEmpty()) {
+				lines.add(line.toString());
+				line = new StringBuilder(word);
+			} else {
+				line = new StringBuilder(candidate);
+			}
+		}
+		if (!line.isEmpty()) lines.add(line.toString());
+		return lines;
 	}
 
 	public void textCentered(String s, int cx, int y, int color) {

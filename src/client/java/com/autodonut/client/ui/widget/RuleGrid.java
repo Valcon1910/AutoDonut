@@ -131,9 +131,7 @@ public class RuleGrid extends Widget {
 		float k = Anim.easeInOut(knob.update(ui.dt));
 		int sx = cx + cw - ToggleSwitch.WIDTH - 6;
 		int sy = cy + CARD_H - ToggleSwitch.HEIGHT - 5;
-		ui.round(sx, sy, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT, 7, Anim.lerpColor(ui.theme.track(), ui.theme.accent(), k));
-		int r = ToggleSwitch.HEIGHT / 2 - 2;
-		ui.circle(sx + 2 + r + Math.round(k * (ToggleSwitch.WIDTH - 4 - r * 2)), sy + ToggleSwitch.HEIGHT / 2, r, ui.theme.knob());
+		ToggleSwitch.paint(ui, sx, sy, k, 0);
 	}
 
 	private void drawAdd(Ui ui, int cx, int cy, int cw, float hv) {

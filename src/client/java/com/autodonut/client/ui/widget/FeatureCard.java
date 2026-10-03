@@ -33,7 +33,7 @@ public class FeatureCard extends Widget {
 	}
 
 	private int switchX() {
-		return x + w - ToggleSwitch.WIDTH - 7;
+		return x + w - ToggleSwitch.WIDTH - 8;
 	}
 
 	private int switchY() {
@@ -57,20 +57,22 @@ public class FeatureCard extends Widget {
 		ui.fill(x + 10, y + 10, x + 14, y + 14, Anim.lerpColor(ui.theme.surface(), ui.theme.onAccent(), k));
 
 		int textW = w - 22 - ToggleSwitch.WIDTH - 14;
-		ui.text(ui.trim(title, textW), x + 22, y + 8, Anim.lerpColor(ui.theme.text(), ui.theme.accent(), k));
-		ui.text(ui.trim(description, w - 14), x + 7, y + 22, ui.theme.textMuted());
+		ui.text(ui.trim(title.toUpperCase(java.util.Locale.ROOT), textW), x + 22, y + 9, Anim.lerpColor(ui.theme.text(), ui.theme.accent(), k));
+		java.util.List<String> lines = ui.wrap(description, w - 16);
+		for (int i = 0; i < Math.min(2, lines.size()); i++) {
+			ui.text(lines.get(i), x + 8, y + 24 + i * 10, ui.theme.textMuted());
+		}
 
 		String tag = k > 0.5f ? "ON" : "OFF";
 		int tagColor = k > 0.5f ? ui.theme.success() : ui.theme.textMuted();
-		ui.text(tag, x + 7, y + h - 13, tagColor);
+		ui.fill(x + 8, y + h - 19, x + w - 8, y + h - 18, ui.theme.border());
+		ui.text(tag, x + 8, y + h - 13, tagColor);
 		String st = status.get();
-		if (!st.isEmpty()) ui.text(ui.trim(st, w - 30 - (onOpen != null ? 16 : 0)), x + 7 + ui.width(tag) + 6, y + h - 13, ui.theme.textMuted());
-		if (onOpen != null) ui.textRight(">", x + w - 7, y + h - 13, Anim.lerpColor(ui.theme.textMuted(), ui.theme.accent(), hv));
+		if (!st.isEmpty()) ui.text(ui.trim(st, w - 30 - (onOpen != null ? 16 : 0)), x + 8 + ui.width(tag) + 6, y + h - 13, ui.theme.textMuted());
+		if (onOpen != null) ui.textRight(">", x + w - 8, y + h - 13, Anim.lerpColor(ui.theme.textMuted(), ui.theme.accent(), hv));
 
 		int sx = switchX(), sy = switchY();
-		ui.round(sx, sy, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT, 7, Anim.lerpColor(ui.theme.track(), ui.theme.accent(), k));
-		int r = ToggleSwitch.HEIGHT / 2 - 2;
-		ui.circle(sx + 2 + r + Math.round(k * (ToggleSwitch.WIDTH - 4 - r * 2)), sy + ToggleSwitch.HEIGHT / 2, r, ui.theme.knob());
+		ToggleSwitch.paint(ui, sx, sy, k, 0);
 	}
 
 	@Override
