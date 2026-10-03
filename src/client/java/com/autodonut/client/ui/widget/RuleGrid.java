@@ -12,6 +12,7 @@ import com.autodonut.client.config.AuctionRule;
 import com.autodonut.client.config.PriceFormat;
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /**
  * Auction rules as a grid of cards. Click a card to edit it, use its switch to turn it
@@ -69,6 +70,11 @@ public class RuleGrid extends Widget {
 	}
 
 	@Override
+	protected boolean hoverSound() {
+		return false;
+	}
+
+	@Override
 	protected void draw(Ui ui, int mx, int my) {
 		scrollTarget = Math.max(0, Math.min(maxScroll(), scrollTarget));
 		scroll.set(scrollTarget);
@@ -83,6 +89,7 @@ public class RuleGrid extends Widget {
 			boolean hovered = contains(mx, my) && mx >= cx && mx < cx + cw && my >= cy && my < cy + CARD_H;
 			Object key = i < rules.size() ? rules.get(i) : addKey;
 			Anim hv = hovers.computeIfAbsent(key, k -> new Anim(0, 16));
+			if (hovered && hv.target() < 0.5f) UiSounds.hover();
 			hv.set(hovered ? 1 : 0);
 			hv.update(ui.dt);
 			if (i < rules.size()) drawRule(ui, rules.get(i), cx, cy, cw, hv.get());
@@ -156,6 +163,7 @@ public class RuleGrid extends Widget {
 			int cy = cellY(i, off);
 			if (mx < cx || mx >= cx + cw || my < cy || my >= cy + CARD_H) continue;
 			if (i == rules.size()) {
+				UiSounds.click();
 				onAdd.run();
 				return true;
 			}
@@ -164,8 +172,10 @@ public class RuleGrid extends Widget {
 			int sy = cy + CARD_H - ToggleSwitch.HEIGHT - 5;
 			if (mx >= sx - 3 && mx < sx + ToggleSwitch.WIDTH + 3 && my >= sy - 3 && my < sy + ToggleSwitch.HEIGHT + 3) {
 				rule.enabled = !rule.enabled;
+				UiSounds.toggle(rule.enabled);
 				onChanged.run();
 			} else {
+				UiSounds.click();
 				onEdit.accept(rule);
 			}
 			return true;

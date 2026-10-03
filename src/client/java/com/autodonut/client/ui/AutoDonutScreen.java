@@ -66,6 +66,9 @@ public class AutoDonutScreen extends Screen {
 	private Theme themeFrom;
 	private Theme themeTo;
 	private boolean rebuildPending;
+	/** 0 = Exactly (no range row), 1 = Custom (range slider row shown). Drives the editor's layout shift. */
+	private final Anim customRow = new Anim(0, 14);
+	private int hoveredResult = -1;
 	private int[] appearanceLabels = new int[0];
 	/** Invisible vanilla text box that holds keyboard focus so the game sends typed characters. */
 	private EditBox inputSink;
@@ -411,6 +414,7 @@ public class AutoDonutScreen extends Screen {
 
 	private void editRule(AuctionRule rule) {
 		editing = rule;
+		customRow.snap(rule.mode == QuantityMode.CUSTOM ? 1 : 0);
 		setPage(Page.EDIT);
 	}
 
@@ -502,7 +506,19 @@ public class AutoDonutScreen extends Screen {
 		graphics.pose().pushMatrix();
 		graphics.pose().translate((1f - pe) * 10f, 0);
 		drawPageDecor();
-		for (Widget widget : widgets) widget.render(ui, mouseX, mouseY);
+		float pageAlpha = ui.alpha;
+		for (Widget widget : widgets) {
+			if (widget instanceof RangeSlider) {
+				ui.alpha = pageAlpha * Anim.easeInOut(customRow.get());
+				graphics.pose().pushMatrix();
+				graphics.pose().translate(0, (1f - customRow.get()) * -6f);
+				widget.render(ui, mouseX, mouseY);
+				graphics.pose().popMatrix();
+				ui.alpha = pageAlpha;
+			} else {
+				widget.render(ui, mouseX, mouseY);
+			}
+		}
 		if (resultsVisible()) drawResults(mouseX, mouseY);
 		graphics.pose().popMatrix();
 
@@ -560,6 +576,7 @@ public class AutoDonutScreen extends Screen {
 			if (entry.page() == null) {
 				// Clickable section header with an arrow: down when open, right when collapsed
 				boolean overHeader = mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_SECTION_H;
+				if (overHeader && navHover[i].target() < 0.5f) UiSounds.hover();
 				navHover[i].set(overHeader ? 1 : 0);
 				navHover[i].update(ui.dt);
 				int hc = Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
@@ -581,6 +598,7 @@ public class AutoDonutScreen extends Screen {
 			if (open < 0.05f) continue;
 			ui.alpha = baseAlpha * open;
 			boolean hovered = i != active && mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H;
+			if (hovered && navHover[i].target() < 0.5f) UiSounds.hover();
 			navHover[i].set(hovered ? 1 : 0);
 			navHover[i].update(ui.dt);
 			int color = i == active ? t.text() : Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
@@ -602,6 +620,7 @@ public class AutoDonutScreen extends Screen {
 
 		int cx = closeX(), cy = closeY();
 		boolean overClose = mx >= cx && mx < cx + 16 && my >= cy && my < cy + 16;
+		if (overClose && closeHover.target() < 0.5f) UiSounds.hover();
 		closeHover.set(overClose ? 1 : 0);
 		closeHover.update(ui.dt);
 		ui.round(cx, cy, 16, 16, 3, Anim.lerpColor(t.sidebar(), t.surfaceHover(), closeHover.get()));
@@ -666,7 +685,9 @@ public class AutoDonutScreen extends Screen {
 				ui.text("Quantity", x, top + 66, t.textMuted());
 
 				ItemIndex.Entry entry = ItemIndex.byId(rule.itemId);
-				drawPreview(rule, entry, x, top + 134, w);
+				customRow.set(rule.mode == QuantityMode.CUSTOM ? 1 : 0);
+				float cr = Anim.easeInOut(customRow.update(ui.dt));
+				drawPreview(rule, entry, x, top + 102 + Math.round(cr * 32), w);
 			}
 			case APPEARANCE -> {
 				if (appearanceLabels.length == 2) {
@@ -735,6 +756,10 @@ public class AutoDonutScreen extends Screen {
 			ItemIndex.Entry e = results.get(idx);
 			int ry = y + 2 + i * RESULT_ROW_H;
 			boolean hovered = mx >= x && mx < x + w && my >= ry && my < ry + RESULT_ROW_H;
+			if (hovered && hoveredResult != idx) {
+				hoveredResult = idx;
+				UiSounds.hover();
+			}
 			if (hovered) ui.round(x + 2, ry, w - 4, RESULT_ROW_H, 4, t.surfaceHover());
 			ui.item(e.stack(), x + 4, ry + 1);
 			ui.text(ui.trim(e.name(), w - 120), x + 24, ry + 5, t.text());
@@ -766,7 +791,10 @@ public class AutoDonutScreen extends Screen {
 			int shown = Math.min(MAX_RESULTS_SHOWN, results.size());
 			if (mx >= x && mx < x + searchField.w && my >= y && my < y + shown * RESULT_ROW_H + 4) {
 				int idx = (int) ((my - y - 2) / RESULT_ROW_H) + resultScroll;
-				if (idx >= 0 && idx < results.size()) selectItem(results.get(idx));
+				if (idx >= 0 && idx < results.size()) {
+					UiSounds.click();
+					selectItem(results.get(idx));
+				}
 				return true;
 			}
 		}
@@ -774,6 +802,7 @@ public class AutoDonutScreen extends Screen {
 		// Close button
 		int cx = closeX(), cy = closeY();
 		if (mx >= cx && mx < cx + 16 && my >= cy && my < cy + 16) {
+			UiSounds.click();
 			onClose();
 			return true;
 		}
@@ -783,13 +812,17 @@ public class AutoDonutScreen extends Screen {
 			if (NAV[i].page() == null) {
 				if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_SECTION_H) {
 					sectionOpen[i].set(sectionOpen[i].target() > 0.5f ? 0 : 1);
+					UiSounds.click();
 					return true;
 				}
 				continue;
 			}
 			if (sectionOpen[sectionOf(i)].target() < 0.5f) continue;
 			if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H) {
-				if (NAV[i].page() != page) setPage(NAV[i].page());
+				if (NAV[i].page() != page) {
+					UiSounds.click();
+					setPage(NAV[i].page());
+				}
 				return true;
 			}
 		}

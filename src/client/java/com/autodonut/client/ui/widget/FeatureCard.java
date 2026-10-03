@@ -8,6 +8,7 @@ import net.minecraft.world.item.ItemStack;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /**
  * Home-screen card for one feature: uppercase title, description, live status line and an
@@ -84,8 +85,14 @@ public class FeatureCard extends Widget {
 		if (!contains(mx, my)) return false;
 		int sx = switchX(), sy = switchY();
 		boolean onSwitch = mx >= sx - 3 && mx < sx + ToggleSwitch.WIDTH + 3 && my >= sy - 3 && my < sy + ToggleSwitch.HEIGHT + 3;
-		if (onSwitch || onOpen == null) setter.accept(!getter.getAsBoolean());
-		else onOpen.run();
+		if (onSwitch || onOpen == null) {
+			boolean next = !getter.getAsBoolean();
+			setter.accept(next);
+			UiSounds.toggle(next);
+		} else {
+			UiSounds.click();
+			onOpen.run();
+		}
 		return true;
 	}
 }

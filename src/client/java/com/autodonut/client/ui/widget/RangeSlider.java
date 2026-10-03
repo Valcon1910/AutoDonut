@@ -5,6 +5,7 @@ import java.util.function.IntSupplier;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /** Slider with a minimum and a maximum handle. Drag either handle or scroll near it. */
 public class RangeSlider extends Widget {
@@ -89,6 +90,7 @@ public class RangeSlider extends Widget {
 		int v = valueAt(mx);
 		int dMin = Math.abs(v - minGet.getAsInt());
 		int dMax = Math.abs(v - maxGet.getAsInt());
+		UiSounds.click();
 		dragging = dMin < dMax || (dMin == dMax && v < minGet.getAsInt()) ? 1 : 2;
 		apply(mx);
 		return true;

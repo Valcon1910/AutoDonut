@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /** Dark / light switch: the knob slides and morphs between a moon and a sun. */
 public class ThemeSwitch extends Widget {
@@ -46,6 +47,7 @@ public class ThemeSwitch extends Widget {
 	public boolean mouseClicked(double mx, double my) {
 		if (!contains(mx, my)) return false;
 		setDark.accept(!isDark.getAsBoolean());
+		UiSounds.toggle(!isDark.getAsBoolean());
 		return true;
 	}
 }

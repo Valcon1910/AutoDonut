@@ -7,6 +7,7 @@ import java.util.function.IntSupplier;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /**
  * A grid of selectable tiles (used for colour styles and accents). The selected tile gets
@@ -52,6 +53,11 @@ public class ChoiceGrid extends Widget {
 	}
 
 	@Override
+	protected boolean hoverSound() {
+		return false;
+	}
+
+	@Override
 	protected void draw(Ui ui, int mx, int my) {
 		int tw = tileW();
 		int sel = selected.getAsInt();
@@ -59,6 +65,7 @@ public class ChoiceGrid extends Widget {
 			int tx = tileX(i), ty = tileY(i);
 			boolean over = mx >= tx && mx < tx + tw && my >= ty && my < ty + tileH;
 			Anim hv = hovers.get(i);
+			if (over && hv.target() < 0.5f) UiSounds.hover();
 			hv.set(over ? 1 : 0);
 			hv.update(ui.dt);
 			int bg = Anim.lerpColor(ui.theme.surface(), ui.theme.surfaceHover(), hv.get());
@@ -76,6 +83,7 @@ public class ChoiceGrid extends Widget {
 		for (int i = 0; i < count; i++) {
 			int tx = tileX(i), ty = tileY(i);
 			if (mx >= tx && mx < tx + tw && my >= ty && my < ty + tileH) {
+				if (i != selected.getAsInt()) UiSounds.click();
 				onSelect.accept(i);
 				return true;
 			}

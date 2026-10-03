@@ -35,6 +35,11 @@ public class TextField extends Widget {
 		this.h = 18;
 	}
 
+	@Override
+	protected boolean hoverSound() {
+		return false;
+	}
+
 	public TextField searchIcon() {
 		this.searchIcon = true;
 		return this;
@@ -95,8 +100,9 @@ public class TextField extends Widget {
 
 		boolean caretOn = ((System.currentTimeMillis() - caretEpoch) / 530) % 2 == 0;
 		if (focused && caretOn) {
-			int cx = tx + ui.width(shown) + 1;
-			ui.fill(cx, ty - 1, cx + 1, ty + ui.lineHeight() - 1, ui.theme.accent());
+			// Font widths include one pixel of spacing after the last glyph, so step back by one.
+			int cx = shown.isEmpty() ? tx : tx + ui.width(shown) - 1;
+			ui.fill(cx, ty - 1, cx + 1, ty + ui.lineHeight() - 2, ui.theme.accent());
 		}
 	}
 

@@ -6,6 +6,7 @@ import java.util.function.IntSupplier;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /** Horizontal slider with a value label; supports dragging and the scroll wheel. */
 public class Slider extends Widget {
@@ -80,6 +81,7 @@ public class Slider extends Widget {
 	public boolean mouseClicked(double mx, double my) {
 		if (!contains(mx, my) || mx > x + w - labelWidth) return false;
 		dragging = true;
+		UiSounds.click();
 		setFromMouse(mx);
 		return true;
 	}

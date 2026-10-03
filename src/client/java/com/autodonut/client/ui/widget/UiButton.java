@@ -2,6 +2,7 @@ package com.autodonut.client.ui.widget;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /** Rounded button in one of a few visual styles. */
 public class UiButton extends Widget {
@@ -62,6 +63,7 @@ public class UiButton extends Widget {
 		if (!contains(mx, my)) return false;
 		press.snap(1);
 		press.set(0);
+		UiSounds.click();
 		action.run();
 		return true;
 	}

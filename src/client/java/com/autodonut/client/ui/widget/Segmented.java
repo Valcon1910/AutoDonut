@@ -5,6 +5,7 @@ import java.util.function.IntSupplier;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /** Segmented control: a row of options with a sliding highlight behind the selected one. */
 public class Segmented extends Widget {
@@ -45,7 +46,9 @@ public class Segmented extends Widget {
 		if (!contains(mx, my)) return false;
 		float segW = (w - 4) / (float) options.length;
 		int i = (int) ((mx - x - 2) / segW);
-		setter.accept(Math.max(0, Math.min(options.length - 1, i)));
+		int next = Math.max(0, Math.min(options.length - 1, i));
+		if (next != getter.getAsInt()) UiSounds.click();
+		setter.accept(next);
 		return true;
 	}
 }

@@ -4,12 +4,19 @@ import net.minecraft.client.input.KeyEvent;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /** Minimal retained-mode widget with a smooth hover animation. */
 public abstract class Widget {
 	public int x, y, w, h;
 	public boolean visible = true;
 	protected final Anim hover = new Anim(0, 16);
+	private boolean wasOver;
+
+	/** Whether moving onto this widget plays the hover tick. Containers handle their own parts. */
+	protected boolean hoverSound() {
+		return true;
+	}
 
 	public Widget bounds(int x, int y, int w, int h) {
 		this.x = x;
@@ -25,7 +32,10 @@ public abstract class Widget {
 
 	public final void render(Ui ui, int mx, int my) {
 		if (!visible) return;
-		hover.set(contains(mx, my) ? 1 : 0);
+		boolean over = contains(mx, my);
+		if (over && !wasOver && hoverSound()) UiSounds.hover();
+		wasOver = over;
+		hover.set(over ? 1 : 0);
 		hover.update(ui.dt);
 		draw(ui, mx, my);
 	}

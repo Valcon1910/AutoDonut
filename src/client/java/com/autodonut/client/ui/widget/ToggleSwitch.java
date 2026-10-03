@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
+import com.autodonut.client.ui.UiSounds;
 
 /** iOS-style switch whose knob slides and track colour fades. */
 public class ToggleSwitch extends Widget {
@@ -55,7 +56,9 @@ public class ToggleSwitch extends Widget {
 	@Override
 	public boolean mouseClicked(double mx, double my) {
 		if (!contains(mx, my)) return false;
-		setter.accept(!getter.getAsBoolean());
+		boolean next = !getter.getAsBoolean();
+		setter.accept(next);
+		UiSounds.toggle(next);
 		return true;
 	}
 }
