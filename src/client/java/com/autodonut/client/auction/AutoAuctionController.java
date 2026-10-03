@@ -24,6 +24,7 @@ import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -49,7 +50,7 @@ public final class AutoAuctionController {
 			"limit", "maximum", "too many", "cannot", "can't", "not allowed", "cooldown", "invalid", "you must"
 	};
 
-	private enum Phase { IDLE, SPLITTING, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, RESTORE }
+	private enum Phase { IDLE, SPLITTING, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, HOLDING, RESTORE }
 
 	/** How long to wait for a confirmation menu after sending the sell command. */
 	private static final long CONFIRM_WAIT_MS = 4000;
@@ -68,9 +69,12 @@ public final class AutoAuctionController {
 	private long lastCommandAt;
 	private AuctionRule rule;
 	private int slot = -1;
-	/** Inventory slot the listed item was swapped out of (-1 when nothing is swapped). */
-	private int swappedFrom = -1;
+	/** How the item is currently "held" for the server: 0 = not, 1 = server-side slot switch, 2 = swapped. */
+	private int handMode;
+	/** Selected hotbar slot when the item was put in hand. */
 	private int heldSlot;
+	/** Latest time to keep the item held after confirming while waiting for the server. */
+	private long holdUntil;
 	private String listedItemId = "";
 	private int listedCount;
 	private int listedThisSession;
@@ -120,7 +124,7 @@ public final class AutoAuctionController {
 	}
 
 	public void reset() {
-		swapBack();
+		restoreHand();
 		confirmScreen = null;
 		splitClicks.clear();
 		splitTarget = -1;
@@ -158,7 +162,6 @@ public final class AutoAuctionController {
 			status = "Waiting for Donut SMP";
 			return;
 		}
-		if (player.hurtTime > 0) combatUntil = Math.max(combatUntil, now + COMBAT_PAUSE_MS);
 		if (now < combatUntil) {
 			// Drop whatever was in progress (an open confirm menu becomes visible again);
 			// nothing is touched while in combat.
@@ -176,6 +179,10 @@ public final class AutoAuctionController {
 		}
 		if (phase == Phase.CONFIRMING) {
 			tickConfirming(mc, player, now);
+			return;
+		}
+		if (phase == Phase.HOLDING) {
+			tickHolding(now);
 			return;
 		}
 		boolean otherMenuOpen = mc.gui.screen() != null && !(mc.gui.screen() instanceof AutoDonutScreen);
@@ -364,33 +371,61 @@ public final class AutoAuctionController {
 		status = "Preparing listing";
 	}
 
-	/** Puts the swapped item back where it came from and the player's own item back in hand. */
-	private void swapBack() {
-		if (swappedFrom < 0) return;
+	/**
+	 * Makes the server see {@link #slot}'s item as the held item, without the player seeing
+	 * anything: a hotbar item is "selected" only on the server (the client's selection never
+	 * changes); a main-inventory item is swapped into the held slot, which {@link #restoreHand}
+	 * undoes in the same tick or right after the server answers.
+	 */
+	private boolean putInHand(LocalPlayer player) {
+		Inventory inv = player.getInventory();
+		heldSlot = inv.getSelectedSlot();
+		if (slot == heldSlot) {
+			handMode = 0;
+			return true;
+		}
+		if (Inventory.isHotbarSlot(slot)) {
+			player.connection.send(new ServerboundSetCarriedItemPacket(slot));
+			handMode = 1;
+			return true;
+		}
+		if (InventoryActions.swap(Minecraft.getInstance(), menuSlot(slot), heldSlot)) {
+			handMode = 2;
+			return true;
+		}
+		return false;
+	}
+
+	private void restoreHand() {
 		Minecraft mc = Minecraft.getInstance();
-		if (mc.player != null) InventoryActions.swap(mc, menuSlot(swappedFrom), heldSlot);
-		swappedFrom = -1;
+		LocalPlayer player = mc.player;
+		if (player != null) {
+			if (handMode == 1) {
+				// Tell the server about the slot the player actually has selected (they may have scrolled).
+				player.connection.send(new ServerboundSetCarriedItemPacket(player.getInventory().getSelectedSlot()));
+			} else if (handMode == 2) {
+				InventoryActions.swap(mc, menuSlot(slot), heldSlot);
+			}
+		}
+		handMode = 0;
+	}
+
+	/** The stack the server will treat as held while {@link #putInHand} is in effect. */
+	private ItemStack sourceStack(LocalPlayer player) {
+		return player.getInventory().getItem(slot);
 	}
 
 	private void tickPreSend(LocalPlayer player, AutoDonutConfig cfg, long now) {
 		if (now < phaseUntil) return;
-		Inventory inv = player.getInventory();
-		ItemStack source = inv.getItem(slot);
-		if (source.isEmpty() || !stillMatches(source)) {
+		ItemStack held = sourceStack(player);
+		if (held.isEmpty() || !stillMatches(held)) {
 			reset();
 			return;
 		}
-		ItemStack held = source;
-		// Donut sells what's in your hand, so the item is swapped into the held slot only for the
-		// instant the command is sent, and swapped back right after confirming. The selected
-		// hotbar slot never changes.
-		heldSlot = inv.getSelectedSlot();
-		if (slot != heldSlot) {
-			if (!InventoryActions.swap(Minecraft.getInstance(), menuSlot(slot), heldSlot)) {
-				fail("Couldn't prepare the item for listing");
-				return;
-			}
-			swappedFrom = slot;
+		held = held.copy();
+		if (!putInHand(player)) {
+			fail("Couldn't prepare the item for listing");
+			return;
 		}
 		long total = rule.totalPrice(held.getCount());
 		String command = cfg.sellCommand.replace("{price}", Long.toString(total)).trim();
@@ -405,6 +440,8 @@ public final class AutoAuctionController {
 
 		serverConfirmed = false;
 		if (cfg.autoConfirm) {
+			// Put things back in the same tick; the item is held again only for the confirm click.
+			restoreHand();
 			phase = Phase.AWAIT_CONFIRM;
 			phaseUntil = now + CONFIRM_WAIT_MS;
 			status = "Waiting for confirmation";
@@ -449,21 +486,33 @@ public final class AutoAuctionController {
 		} else {
 			// Dialog-style prompt ("Are you sure you want to sell this?" with No / Yes).
 			Button button = findConfirmButton(open);
-			if (button != null) {
+			if (button != null && stillMatches(sourceStack(player)) && putInHand(player)) {
 				button.onPress(new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0));
 				confirmed = true;
 			}
 		}
 		if (confirmed) {
 			status = "Confirmed";
-			if (!(open instanceof AbstractContainerScreen<?>)) swapBack();
 		} else {
 			// Show the menu so the player can confirm by hand.
 			confirmScreen = null;
 			notifyPlayer(player, "Couldn't find the confirm button, please confirm the listing yourself.");
 		}
+		if (confirmed && handMode != 0) {
+			// Keep it held (server-side) until Donut reports the listing, then put everything back.
+			phase = Phase.HOLDING;
+			holdUntil = now + 1500;
+		} else {
+			phase = Phase.RESTORE;
+			phaseUntil = now + humanizer.between(700, 1400);
+		}
+	}
+
+	private void tickHolding(long now) {
+		if (!serverConfirmed && now < holdUntil) return;
+		restoreHand();
 		phase = Phase.RESTORE;
-		phaseUntil = now + humanizer.between(700, 1400);
+		phaseUntil = now + humanizer.between(300, 700);
 	}
 
 	/**
@@ -531,10 +580,9 @@ public final class AutoAuctionController {
 			else confirmScreen.onClose();
 		}
 		confirmScreen = null;
-		int listedFrom = swappedFrom >= 0 ? swappedFrom : slot;
-		swapBack();
+		restoreHand();
 		Inventory inv = player.getInventory();
-		ItemStack held = inv.getItem(listedFrom);
+		ItemStack held = inv.getItem(slot);
 
 		// If the exact stack is still in hand, the server most likely refused the listing.
 		boolean unchanged = !serverConfirmed && !held.isEmpty()

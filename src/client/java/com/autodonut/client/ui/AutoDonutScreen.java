@@ -284,7 +284,7 @@ public class AutoDonutScreen extends Screen {
 								toggle(() -> cfg.autoConfirm, v -> cfg.autoConfirm = v), ToggleSwitch.WIDTH),
 						new SettingRow("Confirm in background", "Don't show the confirm menu while clicking it",
 								toggle(() -> cfg.confirmInBackground, v -> cfg.confirmInBackground = v), ToggleSwitch.WIDTH),
-						new SettingRow("Pause in menus", "Wait while chests or chat are open",
+						new SettingRow("Pause in menus", "Wait while your inventory, a chest or chat is open",
 								toggle(() -> cfg.pauseInMenus, v -> cfg.pauseInMenus = v), ToggleSwitch.WIDTH),
 						new SettingRow("HUD status", "Show what Auto Auction is doing",
 								toggle(() -> cfg.showHud, v -> cfg.showHud = v), ToggleSwitch.WIDTH)
