@@ -83,6 +83,8 @@ public final class AutoAuctionController {
 	/** Confirmation menu currently being handled; hidden from view when confirming in the background. */
 	private Screen confirmScreen;
 	private long combatUntil;
+	/** One-off rule for a Quick Sell listing (not saved in the config). */
+	private AuctionRule quickRule;
 	/** Set when the server reports the listing ("You listed ..."). */
 	private boolean serverConfirmed;
 	/** Total count per rule item last tick, to notice newly picked-up items. */
@@ -124,9 +126,36 @@ public final class AutoAuctionController {
 		return screen != null && screen == confirmScreen && AutoDonutConfig.get().confirmInBackground;
 	}
 
+	/** True while Donut's combat timer is running. */
+	public boolean inCombat() {
+		return System.currentTimeMillis() < combatUntil;
+	}
+
+	/**
+	 * Lists one stack right away at the given total price (Quick Sell), using the same
+	 * background hand handling and auto-confirm as Auto Auction.
+	 */
+	public void quickList(int inventorySlot, ItemStack stack, long totalPrice) {
+		reset();
+		AuctionRule r = new AuctionRule();
+		r.itemId = ItemIndex.idOf(stack.getItem());
+		r.priceText = Long.toString(totalPrice);
+		r.pricePerItem = false;
+		r.mode = com.autodonut.client.config.QuantityMode.EXACTLY;
+		r.amount = stack.getCount();
+		r.enabled = true;
+		quickRule = r;
+		rule = r;
+		slot = inventorySlot;
+		phase = Phase.PRE_SEND;
+		phaseUntil = System.currentTimeMillis();
+		status = "Quick selling";
+	}
+
 	public void reset() {
 		restoreHand();
 		confirmScreen = null;
+		quickRule = null;
 		splitClicks.clear();
 		splitTarget = -1;
 		phase = Phase.IDLE;
@@ -162,7 +191,7 @@ public final class AutoAuctionController {
 			status = "Booting up";
 			return;
 		}
-		if (!cfg.autoAuctionEnabled) {
+		if (!cfg.autoAuctionEnabled && quickRule == null) {
 			reset();
 			status = "Disabled";
 			return;
@@ -661,7 +690,7 @@ public final class AutoAuctionController {
 	}
 
 	private boolean stillMatches(ItemStack stack) {
-		return rule != null && !stack.isEmpty() && AutoDonutConfig.get().rules.contains(rule)
+		return rule != null && !stack.isEmpty() && (rule == quickRule || AutoDonutConfig.get().rules.contains(rule))
 				&& rule.matches(ItemIndex.idOf(stack.getItem()), stack.getCount());
 	}
 

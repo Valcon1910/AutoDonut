@@ -15,7 +15,9 @@ import net.minecraft.world.inventory.Slot;
 
 import com.autodonut.client.auction.InventoryActions;
 import com.autodonut.client.config.AutoDonutConfig;
+import com.autodonut.client.auction.AutoAuctionController;
 import com.autodonut.client.ui.AutoDonutScreen;
+import com.autodonut.client.ui.QuickSellScreen;
 import com.autodonut.client.ui.UiSounds;
 import com.autodonut.mixin.client.AbstractContainerScreenAccessor;
 
@@ -35,7 +37,7 @@ public final class QuickSell {
 	/** Whether R should act on this screen (not while typing). */
 	public static boolean allowedOn(Screen screen) {
 		if (screen == null) return true;
-		if (screen instanceof ChatScreen || screen instanceof AutoDonutScreen) return false;
+		if (screen instanceof ChatScreen || screen instanceof AutoDonutScreen || screen instanceof QuickSellScreen) return false;
 		return !(screen.getFocused() instanceof EditBox);
 	}
 
@@ -44,49 +46,39 @@ public final class QuickSell {
 		LocalPlayer player = mc.player;
 		if (!cfg.quickSellEnabled || player == null || Lockdown.active()) return;
 		if (cfg.onlyOnDonut && !ServerContext.isOnDonut()) return;
+		if (AutoAuctionController.get().inCombat()) {
+			hint(player, "You're in combat, Quick Sell is unavailable until it ends.");
+			return;
+		}
 
 		long now = System.currentTimeMillis();
-		if (now - lastUse < 800) return;
+		if (now - lastUse < 400) return;
 		lastUse = now;
 
 		Inventory inv = player.getInventory();
-		int sel = inv.getSelectedSlot();
 		Screen screen = mc.gui.screen();
-
+		int index;
 		if (screen instanceof AbstractContainerScreen<?> container) {
 			Slot hovered = ((AbstractContainerScreenAccessor) container).autodonut$getHoveredSlot();
 			if (hovered == null || !hovered.hasItem() || !(hovered.container instanceof Inventory)) {
 				hint(player, "Hover over an item in your inventory, then press R.");
 				return;
 			}
-			int index = hovered.getContainerSlot();
+			index = hovered.getContainerSlot();
 			if (index >= 36) {
 				hint(player, "Armor and off-hand items can't be quick sold.");
 				return;
 			}
-			AbstractContainerMenu menu = container.getMenu();
-			if (index == sel) {
-				send(player, cfg);
-			} else if (Inventory.isHotbarSlot(index)) {
-				// Hotbar item: "hold" it on the server only; nothing moves on screen.
-				player.connection.send(new ServerboundSetCarriedItemPacket(index));
-				send(player, cfg);
-				restoreAt = now + 1200;
-			} else {
-				// Main-inventory item: swap into the held slot, sell, swap back in the same tick.
-				int menuSlot = menu.slots.indexOf(hovered);
-				if (!InventoryActions.swapIn(mc, menu.containerId, menuSlot, sel)) return;
-				send(player, cfg);
-				InventoryActions.swapIn(mc, menu.containerId, menuSlot, sel);
+			// Close the container properly before showing the price prompt.
+			player.closeContainer();
+		} else {
+			index = inv.getSelectedSlot();
+			if (inv.getItem(index).isEmpty()) {
+				hint(player, "Hold the item you want to sell, then press R.");
+				return;
 			}
-			return;
 		}
-
-		if (player.getMainHandItem().isEmpty()) {
-			hint(player, "Hold the item you want to sell, then press R.");
-			return;
-		}
-		send(player, cfg);
+		mc.gui.setScreen(new QuickSellScreen(index, inv.getItem(index)));
 	}
 
 	/** Undoes a pending server-side slot switch. Called every client tick. */
