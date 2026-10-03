@@ -1,5 +1,10 @@
 package com.autodonut.client;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import net.fabricmc.loader.api.FabricLoader;
 
 import com.autodonut.client.config.AutoDonutConfig;
@@ -11,6 +16,9 @@ public final class Compat {
 
 	private static Boolean minimap;
 	private static Boolean recorder;
+	private static Boolean roundMinimap;
+	private static long shapeCheckedAt;
+	private static final Pattern XAERO_SHAPE = Pattern.compile("minimapShape:(\\d+)");
 
 	private Compat() {
 	}
@@ -27,6 +35,45 @@ public final class Compat {
 	public static boolean hasMinimap() {
 		if (minimap == null) minimap = any(MINIMAPS);
 		return minimap;
+	}
+
+	/**
+	 * Whether the minimap is round. Read from Xaero's config (minimapShape: 1 = circle) and
+	 * re-checked every few seconds so changing the shape in-game is picked up.
+	 */
+	public static boolean minimapIsRound() {
+		long now = System.currentTimeMillis();
+		if (roundMinimap == null || now - shapeCheckedAt > 5000) {
+			shapeCheckedAt = now;
+			roundMinimap = readXaeroShape();
+		}
+		return roundMinimap;
+	}
+
+	private static boolean readXaeroShape() {
+		Path config = FabricLoader.getInstance().getConfigDir();
+		Path[] candidates = {
+				config.resolve("xaerominimap.txt"),
+				config.resolve("xaero").resolve("minimap.txt"),
+				config.resolve("xaero").resolve("minimap").resolve("config.txt"),
+				config.resolve("xaero").resolve("minimap").resolve("profiles").resolve("default.txt"),
+		};
+		for (Path p : candidates) {
+			try {
+				if (!Files.isRegularFile(p)) continue;
+				Matcher m = XAERO_SHAPE.matcher(Files.readString(p));
+				if (m.find()) return m.group(1).equals("1");
+			} catch (Exception ignored) {
+				// Unreadable config: fall through to the default.
+			}
+		}
+		return false;
+	}
+
+	/** Left edge for the status label so it clears the minimap (square maps are wider at the top). */
+	public static int hudX() {
+		int base = !hasMinimap() ? 6 : minimapIsRound() ? 82 : 96;
+		return Math.max(2, base + AutoDonutConfig.get().hudOffset);
 	}
 
 	/** A replay or screen-recording mod is installed. */

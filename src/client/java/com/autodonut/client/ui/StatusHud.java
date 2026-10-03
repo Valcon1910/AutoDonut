@@ -40,11 +40,12 @@ public final class StatusHud {
 		String status = auction.status();
 		int w = 18 + UI.width(label) + 8 + UI.width(status) + 8;
 		// Leave room for a top-left minimap (Xaero's, JourneyMap, VoxelMap).
-		int baseX = Compat.hasMinimap() ? Math.min(150, graphics.guiWidth() / 3) : 6;
-		int x = baseX - Math.round((1f - v) * 10);
+		int x = Compat.hudX() - Math.round((1f - v) * 10);
 		int y = 6;
 		UI.card(x, y, w, 16, 8, UI.theme.panel(), UI.theme.border());
-		UI.circle(x + 9, y + 8, 3, UI.theme.accent());
+		UI.alpha = Math.max(UI.alpha, 0.61f);
+		UI.logo(x + 3, y + 2, 12);
+		UI.alpha = v * 0.92f;
 		UI.text(label, x + 17, y + 4, UI.theme.text());
 		UI.text(status, x + 17 + UI.width(label) + 8, y + 4, UI.theme.textMuted());
 	}

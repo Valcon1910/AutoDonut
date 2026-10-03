@@ -44,6 +44,19 @@ public class AutoDonutConfig {
 	public boolean autoConfirm = true;
 	public boolean confirmInBackground = true;
 	public boolean streamerMode = false;
+	/** 0 = Relaxed, 1 = Normal, 2 = Fast. Scales how quickly items are noticed and handled. */
+	public int detectionSpeed = 1;
+	/** Extra horizontal offset for the status label, added to the automatic position. */
+	public int hudOffset = 0;
+
+	/** Multiplier for reaction and handling delays. */
+	public float speedFactor() {
+		return switch (detectionSpeed) {
+			case 0 -> 1.6f;
+			case 2 -> 0.35f;
+			default -> 1f;
+		};
+	}
 
 	public static AutoDonutConfig get() {
 		if (instance == null) load();
@@ -110,5 +123,7 @@ public class AutoDonutConfig {
 		maxDelaySeconds = Math.clamp(maxDelaySeconds, minDelaySeconds, 300);
 		maxReactionSeconds = Math.clamp(maxReactionSeconds, 1, 15);
 		maxListingsPerHour = Math.clamp(maxListingsPerHour, 1, 60);
+		detectionSpeed = Math.clamp(detectionSpeed, 0, 2);
+		hudOffset = Math.clamp(hudOffset, -60, 200);
 	}
 }

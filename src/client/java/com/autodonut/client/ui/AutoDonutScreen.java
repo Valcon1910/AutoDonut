@@ -265,6 +265,14 @@ public class AutoDonutScreen extends Screen {
 									cfg.maxDelaySeconds = v;
 									if (cfg.minDelaySeconds > v) cfg.minDelaySeconds = Math.max(3, v);
 								}, v -> v + "s"), 110).warning(this::maxDelayWarning),
+						new SettingRow("Detection speed", "How quickly new items are noticed and listed",
+								new Segmented(new String[]{"Relaxed", "Normal", "Fast"}, () -> cfg.detectionSpeed, i -> {
+									cfg.detectionSpeed = i;
+									AutoDonutConfig.save();
+								}), 130).warning(() -> cfg.detectionSpeed == 2
+										? "Fast reacts to new items and confirms in a fraction of a second. "
+										+ "That's quicker than most people, so it's easier to spot. Use it with longer delays."
+										: null),
 						new SettingRow("Reaction time", "Max wait after picking up an item",
 								new Slider(1, 15, () -> cfg.maxReactionSeconds, v -> cfg.maxReactionSeconds = v, v -> v + "s"), 110),
 						new SettingRow("Listings per hour", "Hard cap, resets on a rolling hour",
@@ -428,6 +436,12 @@ public class AutoDonutScreen extends Screen {
 				});
 		accentGrid.bounds(x, ay, w, accentGrid.h);
 		widgets.add(accentGrid);
+
+		widgets.add(new SettingRow("Status label position", "Nudge it if it overlaps your minimap",
+				new Slider(-60, 200, () -> cfg.hudOffset, v -> {
+					cfg.hudOffset = v;
+					AutoDonutConfig.save();
+				}, v -> v == 0 ? "Auto" : (v > 0 ? "+" : "") + v), 130).bounds(x, ay + accentGrid.h + 10, w, 24));
 		appearanceLabels = new int[]{y - 11, ay - 11};
 	}
 

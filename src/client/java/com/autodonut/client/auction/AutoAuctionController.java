@@ -9,7 +9,18 @@ import java.util.Random;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.events.ContainerEventHandler;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.layouts.LayoutElement;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
@@ -194,7 +205,7 @@ public final class AutoAuctionController {
 				rule = match;
 				slot = i;
 				phase = Phase.REACTING;
-				phaseUntil = now + humanizer.reaction(cfg.maxReactionSeconds);
+				phaseUntil = now + Math.round(humanizer.reaction(cfg.maxReactionSeconds) * cfg.speedFactor());
 				status = "Found " + stack.getHoverName().getString();
 				return;
 			}
@@ -222,7 +233,7 @@ public final class AutoAuctionController {
 		}
 		if (inv.getSelectedSlot() != slot) inv.setSelectedSlot(slot);
 		phase = Phase.PRE_SEND;
-		phaseUntil = now + humanizer.handling();
+		phaseUntil = now + Math.round(humanizer.handling() * AutoDonutConfig.get().speedFactor());
 		status = "Preparing listing";
 	}
 
@@ -259,11 +270,12 @@ public final class AutoAuctionController {
 	}
 
 	private void tickAwaitConfirm(Minecraft mc, long now) {
-		if (mc.gui.screen() instanceof AbstractContainerScreen<?> screen) {
+		Screen screen = mc.gui.screen();
+		if (screen != null && !(screen instanceof AutoDonutScreen) && !(screen instanceof ChatScreen)) {
 			confirmScreen = screen;
 			phase = Phase.CONFIRMING;
 			// A human needs a moment to find the button.
-			phaseUntil = now + humanizer.between(300, 850);
+			phaseUntil = now + Math.round(humanizer.between(300, 850) * AutoDonutConfig.get().speedFactor());
 			status = "Confirming listing";
 		} else if (now > phaseUntil) {
 			// No confirmation menu appeared; the listing went through directly.
@@ -274,16 +286,29 @@ public final class AutoAuctionController {
 
 	private void tickConfirming(Minecraft mc, LocalPlayer player, long now) {
 		if (now < phaseUntil) return;
-		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> screen) || screen != confirmScreen) {
+		Screen open = mc.gui.screen();
+		if (open == null || open != confirmScreen) {
 			// The menu closed by itself.
 			confirmScreen = null;
 			phase = Phase.RESTORE;
 			phaseUntil = now + humanizer.between(300, 900);
 			return;
 		}
-		AbstractContainerMenu menu = screen.getMenu();
-		int slot = findConfirmSlot(menu);
-		if (slot >= 0 && InventoryActions.leftClick(mc, menu.containerId, slot)) {
+		boolean confirmed = false;
+		if (open instanceof AbstractContainerScreen<?> container) {
+			// Chest-style confirm menu: click the confirm item.
+			AbstractContainerMenu menu = container.getMenu();
+			int slot = findConfirmSlot(menu);
+			confirmed = slot >= 0 && InventoryActions.leftClick(mc, menu.containerId, slot);
+		} else {
+			// Dialog-style prompt ("Are you sure you want to sell this?" with No / Yes).
+			Button button = findConfirmButton(open);
+			if (button != null) {
+				button.onPress(new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0));
+				confirmed = true;
+			}
+		}
+		if (confirmed) {
 			status = "Confirmed";
 		} else {
 			// Show the menu so the player can confirm by hand.
@@ -315,10 +340,47 @@ public final class AutoAuctionController {
 		return byName >= 0 ? byName : byColour;
 	}
 
+	/**
+	 * The confirming button of a dialog: the last enabled button labelled Yes / Confirm /
+	 * Sell / Accept, otherwise the last enabled button that isn't No / Cancel / Back.
+	 */
+	private static Button findConfirmButton(Screen screen) {
+		List<Button> buttons = new ArrayList<>();
+		collectButtons(screen.children(), buttons);
+		Button labelled = null;
+		Button fallback = null;
+		for (Button b : buttons) {
+			if (!b.active || !b.visible) continue;
+			String t = b.getMessage().getString().trim().toLowerCase(Locale.ROOT);
+			if (t.equals("no") || t.contains("cancel") || t.contains("back") || t.contains("close")) continue;
+			fallback = b;
+			if (t.contains("yes") || t.contains("confirm") || t.contains("sell") || t.contains("accept")) labelled = b;
+		}
+		return labelled != null ? labelled : fallback;
+	}
+
+	private static void collectButtons(List<? extends GuiEventListener> children, List<Button> out) {
+		for (GuiEventListener child : children) {
+			if (child instanceof Button b) {
+				if (!out.contains(b)) out.add(b);
+				continue;
+			}
+			if (child instanceof ContainerEventHandler container) collectButtons(container.children(), out);
+			if (child instanceof LayoutElement layout) {
+				layout.visitWidgets(w -> {
+					if (w instanceof Button b && !out.contains(b)) out.add(b);
+				});
+			}
+		}
+	}
+
 	private void tickRestore(Minecraft mc, LocalPlayer player, AutoDonutConfig cfg, long now) {
 		if (now < phaseUntil) return;
 		// Close a confirmation menu the server left open.
-		if (confirmScreen != null && mc.gui.screen() == confirmScreen) player.closeContainer();
+		if (confirmScreen != null && mc.gui.screen() == confirmScreen) {
+			if (confirmScreen instanceof AbstractContainerScreen<?>) player.closeContainer();
+			else confirmScreen.onClose();
+		}
 		confirmScreen = null;
 		Inventory inv = player.getInventory();
 		ItemStack held = player.getMainHandItem();
