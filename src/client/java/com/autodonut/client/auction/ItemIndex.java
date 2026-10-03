@@ -30,14 +30,19 @@ public final class ItemIndex {
 	private static List<Entry> entries() {
 		if (entries == null) {
 			List<Entry> list = new ArrayList<>();
-			BuiltInRegistries.ITEM.stream().forEach(item -> {
-				if (item == Items.AIR) return;
-				ItemStack stack = item.getDefaultInstance();
-				Entry e = new Entry(idOf(item), stack.getHoverName().getString(), stack);
-				list.add(e);
-				BY_ID.put(e.id(), e);
-			});
+			try {
+				BuiltInRegistries.ITEM.stream().forEach(item -> {
+					if (item == Items.AIR) return;
+					ItemStack stack = item.getDefaultInstance();
+					list.add(new Entry(idOf(item), stack.getHoverName().getString(), stack));
+				});
+			} catch (RuntimeException e) {
+				// Item data isn't bound yet (e.g. while joining a server). Try again later.
+				return List.of();
+			}
 			list.sort(Comparator.comparing(Entry::name));
+			BY_ID.clear();
+			for (Entry e : list) BY_ID.put(e.id(), e);
 			entries = list;
 		}
 		return entries;

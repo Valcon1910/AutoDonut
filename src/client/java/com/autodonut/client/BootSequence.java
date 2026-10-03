@@ -6,7 +6,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import com.autodonut.client.auction.AutoAuctionController;
-import com.autodonut.client.auction.ItemIndex;
 import com.autodonut.client.config.AutoDonutConfig;
 
 /**
@@ -19,7 +18,7 @@ public final class BootSequence {
 	private static final long STEP_MS = 160;
 	private static final List<Step> STEPS = List.of(
 			new Step("Loading settings", AutoDonutConfig::load),
-			new Step("Indexing items", () -> ItemIndex.byId("minecraft:stone")),
+			new Step("Connecting features", () -> { }),
 			new Step("Preparing Auto Auction", () -> AutoAuctionController.get().onDisconnect()),
 			new Step("Safety checks ready", () -> { }),
 			new Step("Ready", () -> { })

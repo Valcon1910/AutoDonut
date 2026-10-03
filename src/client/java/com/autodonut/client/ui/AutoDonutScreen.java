@@ -102,6 +102,7 @@ public class AutoDonutScreen extends Screen {
 	public AutoDonutScreen() {
 		super(Component.literal("AutoDonut"));
 		themeTo = Theme.current(cfg);
+		UiSounds.open();
 		themeFrom = themeTo;
 		for (int i = 0; i < navHover.length; i++) {
 			navHover[i] = new Anim(0, 16);
@@ -984,6 +985,7 @@ public class AutoDonutScreen extends Screen {
 	public void onClose() {
 		if (closingAt >= 0) return;
 		// Keep the editor's rule alive while the close animation still draws it; removed() cleans up.
+		UiSounds.close();
 		AutoDonutConfig.save();
 		closingAt = System.nanoTime();
 	}
