@@ -78,10 +78,24 @@ public class RangeSlider extends Widget {
 		ui.textRight(highText, x + w, y + 16, ui.theme.textMuted());
 	}
 
+	private void setMin(int v) {
+		if (v != minGet.getAsInt()) {
+			minSet.accept(v);
+			UiSounds.slide(frac(v));
+		}
+	}
+
+	private void setMax(int v) {
+		if (v != maxGet.getAsInt()) {
+			maxSet.accept(v);
+			UiSounds.slide(frac(v));
+		}
+	}
+
 	private void apply(double mx) {
 		int v = valueAt(mx);
-		if (dragging == 1) minSet.accept(Math.min(v, maxGet.getAsInt()));
-		else if (dragging == 2) maxSet.accept(Math.max(v, minGet.getAsInt()));
+		if (dragging == 1) setMin(Math.min(v, maxGet.getAsInt()));
+		else if (dragging == 2) setMax(Math.max(v, minGet.getAsInt()));
 	}
 
 	@Override
@@ -90,7 +104,6 @@ public class RangeSlider extends Widget {
 		int v = valueAt(mx);
 		int dMin = Math.abs(v - minGet.getAsInt());
 		int dMax = Math.abs(v - maxGet.getAsInt());
-		UiSounds.click();
 		dragging = dMin < dMax || (dMin == dMax && v < minGet.getAsInt()) ? 1 : 2;
 		apply(mx);
 		return true;
@@ -112,8 +125,8 @@ public class RangeSlider extends Widget {
 		int step = amount > 0 ? 1 : -1;
 		int v = valueAt(mx);
 		boolean nearMin = Math.abs(v - minGet.getAsInt()) <= Math.abs(v - maxGet.getAsInt());
-		if (nearMin) minSet.accept(Math.max(lo, Math.min(maxGet.getAsInt(), minGet.getAsInt() + step)));
-		else maxSet.accept(Math.min(hi, Math.max(minGet.getAsInt(), maxGet.getAsInt() + step)));
+		if (nearMin) setMin(Math.max(lo, Math.min(maxGet.getAsInt(), minGet.getAsInt() + step)));
+		else setMax(Math.min(hi, Math.max(minGet.getAsInt(), maxGet.getAsInt() + step)));
 		return true;
 	}
 }

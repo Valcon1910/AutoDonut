@@ -71,17 +71,24 @@ public class Slider extends Widget {
 		ui.textRight(format.apply(getter.getAsInt()), x + w, y + (h - ui.lineHeight()) / 2 + 1, ui.theme.text());
 	}
 
+	/** Applies a value, ticking only when it actually changes. */
+	private void set(int value) {
+		if (value != getter.getAsInt()) {
+			setter.accept(value);
+			UiSounds.slide((value - min) / (float) (max - min));
+		}
+	}
+
 	private void setFromMouse(double mx) {
 		float f = (float) ((mx - trackX()) / trackW());
 		f = Anim.clamp01(f);
-		setter.accept(min + Math.round(f * (max - min)));
+		set(min + Math.round(f * (max - min)));
 	}
 
 	@Override
 	public boolean mouseClicked(double mx, double my) {
 		if (!contains(mx, my) || mx > x + w - labelWidth) return false;
 		dragging = true;
-		UiSounds.click();
 		setFromMouse(mx);
 		return true;
 	}
@@ -100,7 +107,7 @@ public class Slider extends Widget {
 	public boolean mouseScrolled(double mx, double my, double amount) {
 		if (!contains(mx, my)) return false;
 		int v = getter.getAsInt() + (amount > 0 ? 1 : -1);
-		setter.accept(Math.max(min, Math.min(max, v)));
+		set(Math.max(min, Math.min(max, v)));
 		return true;
 	}
 }
