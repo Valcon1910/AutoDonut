@@ -69,5 +69,6 @@ public class AutoDonutClient implements ClientModInitializer {
 			}
 		}
 		AutoAuctionController.get().tick(client);
+		BootSequence.tick(client);
 	}
 }

@@ -68,7 +68,9 @@ public final class AutoAuctionController {
 	private long lastCommandAt;
 	private AuctionRule rule;
 	private int slot = -1;
-	private int previousSelected = -1;
+	/** Inventory slot the listed item was swapped out of (-1 when nothing is swapped). */
+	private int swappedFrom = -1;
+	private int heldSlot;
 	private String listedItemId = "";
 	private int listedCount;
 	private int listedThisSession;
@@ -118,13 +120,13 @@ public final class AutoAuctionController {
 	}
 
 	public void reset() {
+		swapBack();
 		confirmScreen = null;
 		splitClicks.clear();
 		splitTarget = -1;
 		phase = Phase.IDLE;
 		rule = null;
 		slot = -1;
-		previousSelected = -1;
 	}
 
 	public void onDisconnect() {
@@ -284,10 +286,8 @@ public final class AutoAuctionController {
 		return increased;
 	}
 
-	/** Prefer an empty hotbar slot, then any empty main-inventory slot. */
+	/** An empty main-inventory slot (the hotbar is left alone), or -1. */
 	private static int emptySlot(Inventory inv) {
-		int hotbar = emptyHotbarSlot(inv);
-		if (hotbar >= 0) return hotbar;
 		for (int i = 9; i < 36; i++) {
 			if (inv.getItem(i).isEmpty()) return i;
 		}
@@ -355,34 +355,42 @@ public final class AutoAuctionController {
 
 	private void tickReacting(Minecraft mc, LocalPlayer player, long now) {
 		if (now < phaseUntil) return;
-		Inventory inv = player.getInventory();
-		if (!stillMatches(inv.getItem(slot))) {
+		if (!stillMatches(player.getInventory().getItem(slot))) {
 			reset();
 			return;
 		}
-		previousSelected = inv.getSelectedSlot();
-
-		if (!Inventory.isHotbarSlot(slot)) {
-			int target = emptyHotbarSlot(inv);
-			if (target < 0) target = previousSelected;
-			if (!InventoryActions.swapWithHotbar(mc, slot, target)) {
-				fail("Couldn't move the item to your hotbar");
-				return;
-			}
-			slot = target;
-		}
-		if (inv.getSelectedSlot() != slot) inv.setSelectedSlot(slot);
 		phase = Phase.PRE_SEND;
 		phaseUntil = now + Math.round(humanizer.handling() * AutoDonutConfig.get().speedFactor());
 		status = "Preparing listing";
 	}
 
+	/** Puts the swapped item back where it came from and the player's own item back in hand. */
+	private void swapBack() {
+		if (swappedFrom < 0) return;
+		Minecraft mc = Minecraft.getInstance();
+		if (mc.player != null) InventoryActions.swap(mc, menuSlot(swappedFrom), heldSlot);
+		swappedFrom = -1;
+	}
+
 	private void tickPreSend(LocalPlayer player, AutoDonutConfig cfg, long now) {
 		if (now < phaseUntil) return;
-		ItemStack held = player.getMainHandItem();
-		if (held.isEmpty() || !stillMatches(held)) {
+		Inventory inv = player.getInventory();
+		ItemStack source = inv.getItem(slot);
+		if (source.isEmpty() || !stillMatches(source)) {
 			reset();
 			return;
+		}
+		ItemStack held = source;
+		// Donut sells what's in your hand, so the item is swapped into the held slot only for the
+		// instant the command is sent, and swapped back right after confirming. The selected
+		// hotbar slot never changes.
+		heldSlot = inv.getSelectedSlot();
+		if (slot != heldSlot) {
+			if (!InventoryActions.swap(Minecraft.getInstance(), menuSlot(slot), heldSlot)) {
+				fail("Couldn't prepare the item for listing");
+				return;
+			}
+			swappedFrom = slot;
 		}
 		long total = rule.totalPrice(held.getCount());
 		String command = cfg.sellCommand.replace("{price}", Long.toString(total)).trim();
@@ -448,6 +456,7 @@ public final class AutoAuctionController {
 		}
 		if (confirmed) {
 			status = "Confirmed";
+			if (!(open instanceof AbstractContainerScreen<?>)) swapBack();
 		} else {
 			// Show the menu so the player can confirm by hand.
 			confirmScreen = null;
@@ -522,8 +531,10 @@ public final class AutoAuctionController {
 			else confirmScreen.onClose();
 		}
 		confirmScreen = null;
+		int listedFrom = swappedFrom >= 0 ? swappedFrom : slot;
+		swapBack();
 		Inventory inv = player.getInventory();
-		ItemStack held = player.getMainHandItem();
+		ItemStack held = inv.getItem(listedFrom);
 
 		// If the exact stack is still in hand, the server most likely refused the listing.
 		boolean unchanged = !serverConfirmed && !held.isEmpty()
@@ -540,9 +551,6 @@ public final class AutoAuctionController {
 			failures.remove(rule);
 		}
 
-		if (previousSelected >= 0 && previousSelected != inv.getSelectedSlot()) {
-			inv.setSelectedSlot(previousSelected);
-		}
 		if (!unchanged && hasMoreToList(inv, cfg, now)) {
 			// More of the same job waiting: keep going at a quick, still irregular pace (no breaks mid-batch).
 			nextAllowedAt = now + Math.round(humanizer.between(1200, 3500) * cfg.speedFactor());

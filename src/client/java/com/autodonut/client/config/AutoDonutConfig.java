@@ -94,13 +94,18 @@ public class AutoDonutConfig {
 		}
 	}
 
+	/** Problem from the last load, or null if the file was fine. */
+	public static String lastLoadProblem;
+
 	public static void load() {
+		lastLoadProblem = null;
 		Path path = path();
 		if (Files.exists(path)) {
 			try (Reader reader = Files.newBufferedReader(path)) {
 				instance = GSON.fromJson(reader, AutoDonutConfig.class);
 			} catch (IOException | RuntimeException e) {
 				AutoDonut.LOGGER.error("Failed to read {}, using defaults", path, e);
+				lastLoadProblem = "autodonut.json couldn't be read (" + e.getClass().getSimpleName() + "). Defaults are being used.";
 			}
 		}
 		if (instance == null) instance = new AutoDonutConfig();

@@ -14,6 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
 import com.autodonut.client.BootSequence;
+import com.autodonut.client.Compat;
 import com.autodonut.client.ServerContext;
 
 /**
@@ -35,7 +36,7 @@ public abstract class ConnectScreenMixin {
 
 	@ModifyVariable(method = "updateStatus", at = @At("HEAD"), argsOnly = true, require = 0)
 	private Component autodonut$bootMessage(Component status) {
-		if (!ServerContext.isOnDonut()) return status;
+		if (!ServerContext.isOnDonut() || Compat.streamerMode()) return status;
 		if (status.getContents() instanceof TranslatableContents translatable
 				&& "connect.encrypting".equals(translatable.getKey())) {
 			autodonut$encrypted = true;

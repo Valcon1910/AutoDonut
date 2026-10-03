@@ -27,6 +27,21 @@ public final class InventoryActions {
 		return click(mc, player.inventoryMenu.containerId, inventorySlot, hotbarSlot, "SWAP");
 	}
 
+	/**
+	 * Swaps the item in a player-inventory menu slot with a hotbar slot (like pressing a number
+	 * key over it). Used to put an item in the held slot for an instant and back again.
+	 */
+	public static boolean swap(Minecraft mc, int menuSlot, int hotbarSlot) {
+		LocalPlayer player = mc.player;
+		if (player == null || player.containerMenu != player.inventoryMenu) return false;
+		return click(mc, player.inventoryMenu.containerId, menuSlot, hotbarSlot, "SWAP");
+	}
+
+	/** Whether inventory clicks can be sent (the click method was found). */
+	public static boolean available(Minecraft mc) {
+		return mc.gameMode == null ? !lookedUp || clickMethod != null : lookup(mc);
+	}
+
 	/** Left-clicks a slot of the open container, like a normal mouse click. */
 	public static boolean leftClick(Minecraft mc, int containerId, int menuSlot) {
 		return click(mc, containerId, menuSlot, 0, "PICKUP");

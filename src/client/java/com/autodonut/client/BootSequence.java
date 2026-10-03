@@ -1,31 +1,58 @@
 package com.autodonut.client;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.function.Supplier;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
+import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
+
 import com.autodonut.client.auction.AutoAuctionController;
+import com.autodonut.client.auction.InventoryActions;
 import com.autodonut.client.config.AutoDonutConfig;
+import com.autodonut.client.ui.BootErrorScreen;
 
 /**
- * The "AutoDonut Booting Up" sequence on the connect screen. Each step does its real work
- * when its turn comes, then its line fades in under the status text.
+ * The "AutoDonut Booting Up" checks on the connect screen. Each step runs a real check when
+ * its turn comes; its line fades in with a tick, or a cross if it failed. Failures are
+ * explained in a window once the player is in the world.
  */
 public final class BootSequence {
-	private record Step(String label, Runnable work) { }
+	/** A check returns null when fine, or a human explanation of what went wrong. */
+	private record Step(String label, Supplier<String> check) { }
 
-	private static final long STEP_MS = 160;
+	/** A failed step, with the explanation and a guess at what caused it. */
+	public record Failure(String step, String reason, String cause) { }
+
+	private static final long STEP_MS = 170;
 	private static final List<Step> STEPS = List.of(
-			new Step("Loading settings", AutoDonutConfig::load),
-			new Step("Connecting features", () -> { }),
-			new Step("Preparing Auto Auction", () -> AutoAuctionController.get().onDisconnect()),
-			new Step("Safety checks ready", () -> { }),
-			new Step("Ready", () -> { })
+			new Step("Loading settings", () -> {
+				AutoDonutConfig.load();
+				return AutoDonutConfig.lastLoadProblem;
+			}),
+			new Step("Connecting features", () -> {
+				Minecraft mc = Minecraft.getInstance();
+				return mc.gameMode != null && !InventoryActions.available(mc)
+						? "Inventory actions aren't available, so items can't be prepared for listing." : null;
+			}),
+			new Step("Preparing Auto Auction", () -> {
+				AutoAuctionController.get().onDisconnect();
+				return null;
+			}),
+			new Step("Safety checks", () -> {
+				AutoDonutConfig cfg = AutoDonutConfig.get();
+				return cfg.maxDelaySeconds < cfg.minDelaySeconds ? "The maximum delay is lower than the minimum delay." : null;
+			})
 	);
 
 	private static long startedAt = -1;
 	private static int done;
+	private static final List<Boolean> results = new ArrayList<>();
+	private static final List<Failure> failures = new ArrayList<>();
 
 	private BootSequence() {
 	}
@@ -34,34 +61,81 @@ public final class BootSequence {
 		if (startedAt < 0) {
 			startedAt = System.currentTimeMillis();
 			done = 0;
+			results.clear();
+			failures.clear();
 		}
 	}
 
 	public static void reset() {
 		startedAt = -1;
 		done = 0;
+		results.clear();
 	}
 
-	/** Draws the completed steps below the connect screen's status line. */
-	public static void render(GuiGraphicsExtractor graphics) {
-		if (startedAt < 0) return;
-		long elapsed = System.currentTimeMillis() - startedAt;
-		while (done < STEPS.size() && elapsed >= (done + 1) * STEP_MS) {
-			STEPS.get(done).work().run();
-			done++;
+	private static void runNext() {
+		Step step = STEPS.get(done);
+		String problem;
+		String cause;
+		try {
+			problem = step.check().get();
+			cause = problem == null ? null : "A setting or file used by AutoDonut.";
+		} catch (Throwable t) {
+			problem = t.getClass().getSimpleName() + (t.getMessage() == null ? "" : ": " + t.getMessage());
+			cause = blame(t);
 		}
+		results.add(problem == null);
+		if (problem != null) failures.add(new Failure(step.label(), problem, cause));
+		done++;
+	}
+
+	/**
+	 * Names the most likely culprit of an exception: the first stack frame that belongs to a
+	 * mod other than AutoDonut, Minecraft, Fabric or Java.
+	 */
+	static String blame(Throwable t) {
+		for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+			for (StackTraceElement frame : cur.getStackTrace()) {
+				String cls = frame.getClassName();
+				if (cls.startsWith("java.") || cls.startsWith("jdk.") || cls.startsWith("sun.") || cls.startsWith("net.minecraft.")
+						|| cls.startsWith("com.mojang.") || cls.startsWith("com.autodonut.") || cls.startsWith("net.fabricmc.")
+						|| cls.startsWith("org.spongepowered.") || cls.startsWith("com.llamalad7.") || cls.startsWith("knot")) continue;
+				String lower = cls.toLowerCase(Locale.ROOT);
+				for (ModContainer mod : FabricLoader.getInstance().getAllMods()) {
+					String id = mod.getMetadata().getId().toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
+					if (id.length() > 3 && lower.replace("_", "").contains(id)) {
+						return "The mod \"" + mod.getMetadata().getName() + "\" (" + cls + ").";
+					}
+				}
+				return "Another mod (code in " + cls.substring(0, Math.max(0, cls.lastIndexOf('.'))) + ").";
+			}
+		}
+		return "AutoDonut itself, or a Minecraft / Fabric API update it doesn't support yet.";
+	}
+
+	/** Draws the step lines below the connect screen's status. */
+	public static void render(GuiGraphicsExtractor graphics) {
+		if (startedAt < 0 || Compat.streamerMode()) return;
+		long elapsed = System.currentTimeMillis() - startedAt;
+		while (done < STEPS.size() && elapsed >= (done + 1) * STEP_MS) runNext();
+
 		Minecraft mc = Minecraft.getInstance();
 		int cx = graphics.guiWidth() / 2;
 		int y = graphics.guiHeight() / 2 - 30;
 		for (int i = 0; i < done; i++) {
-			Step step = STEPS.get(i);
 			float fade = Math.min(1f, (elapsed - (i + 1) * STEP_MS) / 200f);
 			int alpha = Math.max(8, Math.round(fade * 255));
-			boolean last = i == STEPS.size() - 1;
-			String text = (last ? "" : "✔ ") + step.label();
-			int color = last ? 0xE8689F : 0x9AA0AA;
+			boolean ok = results.get(i);
+			String text = (ok ? "✔ " : "✘ ") + STEPS.get(i).label();
+			int color = ok ? 0x9AA0AA : 0xE5484D;
 			int lineY = y + i * 11 + Math.round((1f - fade) * 4);
 			graphics.text(mc.font, text, cx - mc.font.width(text) / 2, lineY, (alpha << 24) | color, false);
 		}
+	}
+
+	/** Called every client tick: once in the world, explain any failed step. */
+	public static void tick(Minecraft mc) {
+		if (failures.isEmpty() || mc.player == null || mc.gui.screen() != null) return;
+		if (!Compat.streamerMode()) mc.gui.setScreen(new BootErrorScreen(List.copyOf(failures)));
+		failures.clear();
 	}
 }
