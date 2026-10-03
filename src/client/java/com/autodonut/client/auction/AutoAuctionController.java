@@ -9,11 +9,16 @@ import java.util.Random;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
+import com.autodonut.client.Compat;
 import com.autodonut.client.ServerContext;
 import com.autodonut.client.config.AuctionRule;
 import com.autodonut.client.config.AutoDonutConfig;
@@ -33,7 +38,10 @@ public final class AutoAuctionController {
 			"limit", "maximum", "too many", "cannot", "can't", "not allowed", "cooldown", "invalid", "you must"
 	};
 
-	private enum Phase { IDLE, REACTING, PRE_SEND, RESTORE }
+	private enum Phase { IDLE, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, RESTORE }
+
+	/** How long to wait for a confirmation menu after sending the sell command. */
+	private static final long CONFIRM_WAIT_MS = 4000;
 
 	private final Humanizer humanizer = new Humanizer(new Random());
 	private final Deque<Long> recentListings = new ArrayDeque<>();
@@ -52,6 +60,8 @@ public final class AutoAuctionController {
 	private int listedCount;
 	private int listedThisSession;
 	private String status = "Disabled";
+	/** Confirmation menu currently being handled; hidden from view when confirming in the background. */
+	private Screen confirmScreen;
 
 	public static AutoAuctionController get() {
 		return INSTANCE;
@@ -80,7 +90,13 @@ public final class AutoAuctionController {
 		return cfg.autoAuctionEnabled && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
 	}
 
+	/** True while this screen is the auction confirm menu being clicked in the background. */
+	public boolean isHidden(Screen screen) {
+		return screen != null && screen == confirmScreen && AutoDonutConfig.get().confirmInBackground;
+	}
+
 	public void reset() {
+		confirmScreen = null;
 		phase = Phase.IDLE;
 		rule = null;
 		slot = -1;
@@ -119,6 +135,14 @@ public final class AutoAuctionController {
 			status = "Paused for " + seconds(pausedUntil - now);
 			return;
 		}
+		if (phase == Phase.AWAIT_CONFIRM) {
+			tickAwaitConfirm(mc, now);
+			return;
+		}
+		if (phase == Phase.CONFIRMING) {
+			tickConfirming(mc, player, now);
+			return;
+		}
 		boolean otherMenuOpen = mc.gui.screen() != null && !(mc.gui.screen() instanceof AutoDonutScreen);
 		if (cfg.pauseInMenus && otherMenuOpen) {
 			// Push pending steps back so nothing fires the instant the menu closes.
@@ -134,7 +158,8 @@ public final class AutoAuctionController {
 			case IDLE -> tickIdle(player, cfg, now);
 			case REACTING -> tickReacting(mc, player, now);
 			case PRE_SEND -> tickPreSend(player, cfg, now);
-			case RESTORE -> tickRestore(player, cfg, now);
+			case RESTORE -> tickRestore(mc, player, cfg, now);
+			default -> { }
 		}
 	}
 
@@ -207,16 +232,82 @@ public final class AutoAuctionController {
 		recentListings.addLast(now);
 		listedThisSession++;
 
-		player.sendSystemMessage(prefix().append(Component.literal("Listed " + held.getHoverName().getString()
+		if (!Compat.streamerMode()) player.sendSystemMessage(prefix().append(Component.literal("Listed " + held.getHoverName().getString()
 				+ " x" + held.getCount() + " for " + PriceFormat.format(total)).withStyle(ChatFormatting.GRAY)));
 
-		phase = Phase.RESTORE;
-		phaseUntil = now + humanizer.between(700, 1600);
-		status = "Listed, waiting";
+		if (cfg.autoConfirm) {
+			phase = Phase.AWAIT_CONFIRM;
+			phaseUntil = now + CONFIRM_WAIT_MS;
+			status = "Waiting for confirmation";
+		} else {
+			phase = Phase.RESTORE;
+			phaseUntil = now + humanizer.between(700, 1600);
+			status = "Listed, waiting";
+		}
 	}
 
-	private void tickRestore(LocalPlayer player, AutoDonutConfig cfg, long now) {
+	private void tickAwaitConfirm(Minecraft mc, long now) {
+		if (mc.gui.screen() instanceof AbstractContainerScreen<?> screen) {
+			confirmScreen = screen;
+			phase = Phase.CONFIRMING;
+			// A human needs a moment to find the button.
+			phaseUntil = now + humanizer.between(300, 850);
+			status = "Confirming listing";
+		} else if (now > phaseUntil) {
+			// No confirmation menu appeared; the listing went through directly.
+			phase = Phase.RESTORE;
+			phaseUntil = now + humanizer.between(300, 900);
+		}
+	}
+
+	private void tickConfirming(Minecraft mc, LocalPlayer player, long now) {
 		if (now < phaseUntil) return;
+		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> screen) || screen != confirmScreen) {
+			// The menu closed by itself.
+			confirmScreen = null;
+			phase = Phase.RESTORE;
+			phaseUntil = now + humanizer.between(300, 900);
+			return;
+		}
+		AbstractContainerMenu menu = screen.getMenu();
+		int slot = findConfirmSlot(menu);
+		if (slot >= 0 && InventoryActions.leftClick(mc, menu.containerId, slot)) {
+			status = "Confirmed";
+		} else {
+			// Show the menu so the player can confirm by hand.
+			confirmScreen = null;
+			notifyPlayer(player, "Couldn't find the confirm button, please confirm the listing yourself.");
+		}
+		phase = Phase.RESTORE;
+		phaseUntil = now + humanizer.between(700, 1400);
+	}
+
+	/**
+	 * The confirm button in the auction menu: the last slot whose name mentions "confirm",
+	 * otherwise the last lime/green item (the usual confirm colour). Player inventory slots
+	 * are ignored.
+	 */
+	private static int findConfirmSlot(AbstractContainerMenu menu) {
+		int byName = -1;
+		int byColour = -1;
+		for (int i = 0; i < menu.slots.size(); i++) {
+			Slot slot = menu.slots.get(i);
+			if (slot.container instanceof Inventory) continue;
+			ItemStack stack = slot.getItem();
+			if (stack.isEmpty()) continue;
+			String name = stack.getHoverName().getString().toLowerCase(Locale.ROOT);
+			String id = ItemIndex.idOf(stack.getItem());
+			if (name.contains("confirm")) byName = i;
+			else if (id.contains("lime") || id.contains("green")) byColour = i;
+		}
+		return byName >= 0 ? byName : byColour;
+	}
+
+	private void tickRestore(Minecraft mc, LocalPlayer player, AutoDonutConfig cfg, long now) {
+		if (now < phaseUntil) return;
+		// Close a confirmation menu the server left open.
+		if (confirmScreen != null && mc.gui.screen() == confirmScreen) player.closeContainer();
+		confirmScreen = null;
 		Inventory inv = player.getInventory();
 		ItemStack held = player.getMainHandItem();
 
@@ -286,6 +377,7 @@ public final class AutoAuctionController {
 	}
 
 	private static void notifyPlayer(LocalPlayer player, String message) {
+		if (Compat.streamerMode()) return;
 		player.sendSystemMessage(prefix().append(Component.literal(message).withStyle(ChatFormatting.YELLOW)));
 	}
 

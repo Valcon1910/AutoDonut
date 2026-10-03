@@ -25,14 +25,14 @@ public class RuleGrid extends Widget {
 	private final List<AuctionRule> rules;
 	private final Consumer<AuctionRule> onEdit;
 	private final Runnable onAdd;
-	private final Runnable onChanged;
+	private final Consumer<AuctionRule> onChanged;
 	private final Map<Object, Anim> hovers = new IdentityHashMap<>();
 	private final Map<AuctionRule, Anim> knobs = new IdentityHashMap<>();
 	private final Object addKey = new Object();
 	private final Anim scroll = new Anim(0, 20);
 	private float scrollTarget;
 
-	public RuleGrid(List<AuctionRule> rules, Consumer<AuctionRule> onEdit, Runnable onAdd, Runnable onChanged) {
+	public RuleGrid(List<AuctionRule> rules, Consumer<AuctionRule> onEdit, Runnable onAdd, Consumer<AuctionRule> onChanged) {
 		this.rules = rules;
 		this.onEdit = onEdit;
 		this.onAdd = onAdd;
@@ -173,7 +173,7 @@ public class RuleGrid extends Widget {
 			if (mx >= sx - 3 && mx < sx + ToggleSwitch.WIDTH + 3 && my >= sy - 3 && my < sy + ToggleSwitch.HEIGHT + 3) {
 				rule.enabled = !rule.enabled;
 				UiSounds.toggle(rule.enabled);
-				onChanged.run();
+				onChanged.accept(rule);
 			} else {
 				UiSounds.click();
 				onEdit.accept(rule);

@@ -17,6 +17,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 import com.autodonut.client.AutoDonutClient;
+import com.autodonut.client.Compat;
 import com.autodonut.client.ServerContext;
 import com.autodonut.client.auction.AutoAuctionController;
 import com.autodonut.client.auction.ItemIndex;
@@ -69,6 +70,7 @@ public class AutoDonutScreen extends Screen {
 	/** 0 = Exactly (no range row), 1 = Custom (range slider row shown). Drives the editor's layout shift. */
 	private final Anim customRow = new Anim(0, 14);
 	private int hoveredResult = -1;
+	private int lastMouseX, lastMouseY;
 	private int[] appearanceLabels = new int[0];
 	/** Invisible vanilla text box that holds keyboard focus so the game sends typed characters. */
 	private EditBox inputSink;
@@ -204,7 +206,7 @@ public class AutoDonutScreen extends Screen {
 				List<FeatureCard> cards = List.of(
 						new FeatureCard(new ItemStack(Items.EMERALD), "Auto Auction", "Lists matching items on /ah for you",
 								auction::status, () -> cfg.autoAuctionEnabled, v -> {
-									cfg.autoAuctionEnabled = v;
+									cfg.setAutoAuction(v);
 									AutoDonutConfig.save();
 								}, () -> setPage(Page.AUCTION)),
 						new FeatureCard(new ItemStack(Items.SPYGLASS), "HUD Status", "Small status label while Auto Auction runs",
@@ -216,14 +218,19 @@ public class AutoDonutScreen extends Screen {
 								() -> ServerContext.isOnDonut() ? "Connected" : "Not connected", () -> cfg.onlyOnDonut, v -> {
 									cfg.onlyOnDonut = v;
 									AutoDonutConfig.save();
-								}, () -> setPage(Page.SAFETY))
+								}, () -> setPage(Page.SAFETY)),
+						new FeatureCard(new ItemStack(Items.ENDER_EYE), "Streamer Mode", "Hides the status label and AutoDonut chat messages",
+								() -> Compat.hasRecorder() ? "Recording mod found" : "", () -> Compat.streamerMode(), v -> {
+									cfg.streamerMode = v;
+									AutoDonutConfig.save();
+								}, null)
 				);
 				int introH = introHeight(w);
 				int cardsTop = top + introH + 22;
-				int cols = w >= 360 ? cards.size() : w >= 240 ? 2 : 1;
+				int cols = w >= 240 ? 2 : 1;
 				int gap = 8;
 				int cw = (w - gap * (cols - 1)) / cols;
-				int ch = 72;
+				int ch = Math.min(72, (py + ph - 8 - cardsTop - gap) / 2);
 				for (int i = 0; i < cards.size(); i++) {
 					cards.get(i).bounds(x + (i % cols) * (cw + gap), cardsTop + (i / cols) * (ch + gap), cw, ch);
 					widgets.add(cards.get(i));
@@ -231,13 +238,16 @@ public class AutoDonutScreen extends Screen {
 			}
 			case AUCTION -> {
 				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoAuctionEnabled, v -> {
-					cfg.autoAuctionEnabled = v;
+					cfg.setAutoAuction(v);
 					AutoDonutConfig.save();
 				});
 				master.bounds(x + w - ToggleSwitch.WIDTH - 8, top + 8, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT);
 				widgets.add(master);
 
-				RuleGrid grid = new RuleGrid(cfg.rules, this::editRule, this::addRule, AutoDonutConfig::save);
+				RuleGrid grid = new RuleGrid(cfg.rules, this::editRule, this::addRule, rule -> {
+					cfg.onRuleToggled(rule);
+					AutoDonutConfig.save();
+				});
 				grid.bounds(x, top + 50, w, py + ph - 8 - (top + 50));
 				widgets.add(grid);
 			}
@@ -261,6 +271,10 @@ public class AutoDonutScreen extends Screen {
 								new Slider(1, 60, () -> cfg.maxListingsPerHour, v -> cfg.maxListingsPerHour = v, v -> Integer.toString(v)), 110),
 						new SettingRow("Random breaks", "Sometimes pause for a few minutes",
 								toggle(() -> cfg.randomBreaks, v -> cfg.randomBreaks = v), ToggleSwitch.WIDTH),
+						new SettingRow("Auto-confirm", "Click the confirm button after /ah sell",
+								toggle(() -> cfg.autoConfirm, v -> cfg.autoConfirm = v), ToggleSwitch.WIDTH),
+						new SettingRow("Confirm in background", "Don't show the confirm menu while clicking it",
+								toggle(() -> cfg.confirmInBackground, v -> cfg.confirmInBackground = v), ToggleSwitch.WIDTH),
 						new SettingRow("Pause in menus", "Wait while chests or chat are open",
 								toggle(() -> cfg.pauseInMenus, v -> cfg.pauseInMenus = v), ToggleSwitch.WIDTH),
 						new SettingRow("HUD status", "Show what Auto Auction is doing",
@@ -331,7 +345,7 @@ public class AutoDonutScreen extends Screen {
 		TextField price = new TextField("e.g. 1.5k or 250000", rule.priceText, 16, PriceFormat::isPriceChar, t -> rule.priceText = t).prefix("$ ");
 		price.bounds(x, top + 42, half, 18);
 		widgets.add(price);
-		widgets.add(new Segmented(new String[]{"Per item", "Per stack"}, () -> rule.pricePerItem ? 0 : 1,
+		widgets.add(new Segmented(new String[]{"Each item", "Whole stack"}, () -> rule.pricePerItem ? 0 : 1,
 				i -> rule.pricePerItem = i == 0).bounds(x + half + 6, top + 42, w - half - 6, 18));
 
 		QuantityMode[] modes = QuantityMode.values();
@@ -519,6 +533,8 @@ public class AutoDonutScreen extends Screen {
 		graphics.pose().scale(scale);
 		graphics.pose().translate(-cx, -cy);
 
+		lastMouseX = mouseX;
+		lastMouseY = mouseY;
 		drawPanel(mouseX, mouseY);
 
 		float pe = Anim.easeOutCubic(pageAnim.update(ui.dt));
@@ -704,6 +720,17 @@ public class AutoDonutScreen extends Screen {
 				if (rule == null) return;
 				ui.text("Item", x, top, t.textMuted());
 				ui.text("Price", x, top + 33, t.textMuted());
+				// Info icon explaining the two price modes
+				int ix = x + ui.width("Price") + 4, iy = top + 33;
+				ui.circle(ix + 4, iy + 3, 4, t.track());
+				ui.text("?", ix + 2, iy, t.text());
+				if (lastMouseX >= ix - 1 && lastMouseX < ix + 10 && lastMouseY >= iy - 2 && lastMouseY < iy + 9) {
+					ui.tooltip = "Each item: the price is multiplied by how many items are in the stack "
+							+ "($1k each x 64 = $64k listing). Whole stack: the stack is listed for exactly the price you enter, "
+							+ "whatever its size.";
+					ui.tooltipX = lastMouseX;
+					ui.tooltipY = lastMouseY;
+				}
 				ui.text("Quantity", x, top + 66, t.textMuted());
 
 				ItemIndex.Entry entry = ItemIndex.byId(rule.itemId);

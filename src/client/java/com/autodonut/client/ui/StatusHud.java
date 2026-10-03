@@ -4,6 +4,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
+import com.autodonut.client.Compat;
 import com.autodonut.client.auction.AutoAuctionController;
 import com.autodonut.client.config.AutoDonutConfig;
 
@@ -25,7 +26,7 @@ public final class StatusHud {
 		UI.dt = Math.min(0.1f, (now - lastFrame) / 1_000_000_000f);
 		lastFrame = now;
 
-		boolean show = cfg.showHud && auction.isActive() && mc.gui.screen() == null && mc.player != null;
+		boolean show = cfg.showHud && !Compat.streamerMode() && auction.isActive() && mc.gui.screen() == null && mc.player != null;
 		VISIBLE.set(show ? 1 : 0);
 		float v = VISIBLE.update(UI.dt);
 		if (v <= 0.01f) return;
@@ -38,7 +39,9 @@ public final class StatusHud {
 		String label = "Auto Auction";
 		String status = auction.status();
 		int w = 18 + UI.width(label) + 8 + UI.width(status) + 8;
-		int x = 6 - Math.round((1f - v) * 10);
+		// Leave room for a top-left minimap (Xaero's, JourneyMap, VoxelMap).
+		int baseX = Compat.hasMinimap() ? Math.min(150, graphics.guiWidth() / 3) : 6;
+		int x = baseX - Math.round((1f - v) * 10);
 		int y = 6;
 		UI.card(x, y, w, 16, 8, UI.theme.panel(), UI.theme.border());
 		UI.circle(x + 9, y + 8, 3, UI.theme.accent());

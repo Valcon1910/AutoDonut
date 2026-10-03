@@ -41,6 +41,9 @@ public class AutoDonutConfig {
 	public boolean randomBreaks = true;
 	public boolean pauseInMenus = true;
 	public boolean showHud = true;
+	public boolean autoConfirm = true;
+	public boolean confirmInBackground = true;
+	public boolean streamerMode = false;
 
 	public static AutoDonutConfig get() {
 		if (instance == null) load();
@@ -49,6 +52,24 @@ public class AutoDonutConfig {
 
 	private static Path path() {
 		return FabricLoader.getInstance().getConfigDir().resolve("autodonut.json");
+	}
+
+	/** Master switch: turning Auto Auction on or off does the same to every item. */
+	public void setAutoAuction(boolean on) {
+		autoAuctionEnabled = on;
+		for (AuctionRule r : rules) r.enabled = on;
+	}
+
+	/**
+	 * Keeps the master switch in step with the items: enabling an item turns Auto Auction on
+	 * (other items stay as they are); disabling the last enabled item turns it off.
+	 */
+	public void onRuleToggled(AuctionRule rule) {
+		if (rule.enabled) {
+			autoAuctionEnabled = true;
+		} else if (rules.stream().noneMatch(r -> r.enabled)) {
+			autoAuctionEnabled = false;
+		}
 	}
 
 	public static void load() {

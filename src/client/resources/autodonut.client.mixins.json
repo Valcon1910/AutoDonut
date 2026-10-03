@@ -3,7 +3,8 @@
 	"package": "com.autodonut.mixin.client",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
-		"ConnectScreenMixin"
+		"ConnectScreenMixin",
+		"ScreenMixin"
 	],
 	"injectors": { "defaultRequire": 1 }
 }
