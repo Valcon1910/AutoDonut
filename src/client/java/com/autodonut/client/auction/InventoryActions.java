@@ -42,6 +42,11 @@ public final class InventoryActions {
 		return mc.gameMode == null ? !lookedUp || clickMethod != null : lookup(mc);
 	}
 
+	/** Swap (number-key) click on any open container: moves the slot's item to/from a hotbar slot. */
+	public static boolean swapIn(Minecraft mc, int containerId, int menuSlot, int hotbarSlot) {
+		return click(mc, containerId, menuSlot, hotbarSlot, "SWAP");
+	}
+
 	/** Left-clicks a slot of the open container, like a normal mouse click. */
 	public static boolean leftClick(Minecraft mc, int containerId, int menuSlot) {
 		return click(mc, containerId, menuSlot, 0, "PICKUP");
