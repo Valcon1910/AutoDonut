@@ -61,10 +61,11 @@ public class Slider extends Widget {
 		int filled = Math.round(f * tw);
 		ui.round(tx, ty, Math.max(4, filled), 4, 2, ui.theme.accent());
 
-		int kr = 5 + Math.round(grab.get());
 		int kx = tx + filled;
-		ui.circle(kx, y + h / 2, kr, ui.theme.accent());
-		ui.circle(kx, y + h / 2, kr - 2, ui.theme.knob());
+		int kh = 10 + Math.round(grab.get() * 2);
+		ui.round(kx - 3, y + h / 2 - kh / 2 + 1, 6, kh, 2, 0x40000000);
+		ui.round(kx - 3, y + h / 2 - kh / 2, 6, kh, 2, ui.theme.knob());
+		ui.outline(kx - 3, y + h / 2 - kh / 2, 6, kh, 1, ui.theme.accent());
 
 		ui.textRight(format.apply(getter.getAsInt()), x + w, y + (h - ui.lineHeight()) / 2 + 1, ui.theme.text());
 	}

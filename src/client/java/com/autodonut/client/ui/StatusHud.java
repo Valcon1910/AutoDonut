@@ -32,7 +32,7 @@ public final class StatusHud {
 
 		UI.g = graphics;
 		UI.font = mc.font;
-		UI.theme = cfg.darkMode ? Theme.DARK : Theme.LIGHT;
+		UI.theme = Theme.current(cfg);
 		UI.alpha = v * 0.92f;
 
 		String label = "Auto Auction";

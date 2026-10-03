@@ -1,10 +1,11 @@
 package com.autodonut.client.config;
 
-/** How a stack's size is compared against a rule's amount. */
+/** How a stack's size is checked against a rule. */
 public enum QuantityMode {
+	/** The stack must have exactly {@code amount} items. */
 	EXACTLY("Exactly"),
-	LESS_THAN("Less than"),
-	MORE_THAN("More than");
+	/** The stack size must be between {@code min} and {@code max}, inclusive. */
+	CUSTOM("Custom");
 
 	private final String label;
 
@@ -14,13 +15,5 @@ public enum QuantityMode {
 
 	public String label() {
 		return label;
-	}
-
-	public boolean test(int count, int amount) {
-		return switch (this) {
-			case EXACTLY -> count == amount;
-			case LESS_THAN -> count < amount;
-			case MORE_THAN -> count > amount;
-		};
 	}
 }

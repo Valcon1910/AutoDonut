@@ -52,6 +52,16 @@ public final class ItemIndex {
 		return BY_ID.get(id);
 	}
 
+	/** The item whose display name matches exactly (ignoring case), or null. */
+	public static Entry byName(String name) {
+		String n = name.trim();
+		if (n.isEmpty()) return null;
+		for (Entry e : entries()) {
+			if (e.name().equalsIgnoreCase(n)) return e;
+		}
+		return null;
+	}
+
 	/** Items whose name or id contains the query; names starting with it come first. */
 	public static List<Entry> search(String query, int limit) {
 		String q = query.trim().toLowerCase(Locale.ROOT);

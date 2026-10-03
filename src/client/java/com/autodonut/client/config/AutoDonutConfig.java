@@ -22,6 +22,9 @@ public class AutoDonutConfig {
 
 	// Appearance
 	public boolean darkMode = true;
+	public String darkStyle = "Midnight";
+	public String lightStyle = "Daylight";
+	public String accent = "Donut Pink";
 
 	// Auto Auction
 	public boolean autoAuctionEnabled = false;
@@ -77,12 +80,10 @@ public class AutoDonutConfig {
 	private void sanitize() {
 		if (rules == null) rules = new ArrayList<>();
 		rules.removeIf(r -> r == null);
-		for (AuctionRule r : rules) {
-			if (r.itemId == null) r.itemId = "";
-			if (r.priceText == null) r.priceText = "";
-			if (r.mode == null) r.mode = QuantityMode.EXACTLY;
-			r.amount = Math.clamp(r.amount, 1, 64);
-		}
+		for (AuctionRule r : rules) r.sanitize();
+		if (darkStyle == null) darkStyle = "Midnight";
+		if (lightStyle == null) lightStyle = "Daylight";
+		if (accent == null) accent = "Donut Pink";
 		if (sellCommand == null || sellCommand.isBlank()) sellCommand = "ah sell {price}";
 		minDelaySeconds = Math.clamp(minDelaySeconds, 3, 120);
 		maxDelaySeconds = Math.clamp(maxDelaySeconds, minDelaySeconds, 300);

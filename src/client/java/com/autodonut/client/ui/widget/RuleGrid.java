@@ -2,7 +2,6 @@ package com.autodonut.client.ui.widget;
 
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -111,20 +110,24 @@ public class RuleGrid extends Widget {
 		ItemStack stack = entry == null ? ItemStack.EMPTY : entry.stack();
 		ui.item(stack, cx + 6, cy + 5);
 
-		String name = (entry == null ? "No item" : entry.name()).toUpperCase(Locale.ROOT);
-		String tag = !ready ? (entry == null ? "SETUP" : "SET PRICE") : rule.enabled ? "ACTIVE" : "OFF";
+		String name = entry == null ? "No item" : entry.name();
+		String tag = !ready ? (entry == null ? "Set up" : "Set price") : rule.enabled ? "Active" : "Off";
 		int tagColor = !ready ? ui.theme.danger() : rule.enabled ? ui.theme.success() : ui.theme.textMuted();
 		int tagW = ui.tag(tag, cx + cw - 7, cy + 9, tagColor);
 		ui.text(ui.trim(name, cw - 34 - tagW - 6), cx + 26, cy + 9, ui.theme.text());
 
 		String detail = ready
-				? rule.mode.label() + " " + rule.amount + "  -  $" + PriceFormat.format(rule.price()) + (rule.pricePerItem ? " each" : " / stack")
+				? rule.quantityText() + "  -  $" + PriceFormat.format(rule.price()) + (rule.pricePerItem ? " each" : " per stack")
 				: "Click to finish setting up";
 		ui.text(ui.trim(detail, cw - 14), cx + 7, cy + 22, ui.theme.textMuted());
 
 		// Stack-size meter: how much of a 64 stack the rule's amount covers.
 		int meterW = cw - 14 - ToggleSwitch.WIDTH - 10;
-		ui.meter(cx + 7, cy + 35, meterW, rule.amount / 64f, live ? ui.theme.accent() : ui.theme.textMuted());
+		int lo = rule.mode == com.autodonut.client.config.QuantityMode.EXACTLY ? rule.amount - 1 : rule.min - 1;
+		int hi = rule.mode == com.autodonut.client.config.QuantityMode.EXACTLY ? rule.amount : rule.max;
+		ui.fill(cx + 7, cy + 35, cx + 7 + meterW, cy + 38, ui.theme.track());
+		ui.fill(cx + 7 + Math.round(meterW * lo / 64f), cy + 35, cx + 7 + Math.max(Math.round(meterW * lo / 64f) + 2, Math.round(meterW * hi / 64f)), cy + 38,
+				live ? ui.theme.accent() : ui.theme.textMuted());
 
 		Anim knob = knobs.computeIfAbsent(rule, r -> new Anim(r.enabled ? 1 : 0, 18));
 		knob.set(rule.enabled ? 1 : 0);
@@ -139,7 +142,7 @@ public class RuleGrid extends Widget {
 		if (hv > 0.01f) ui.round(cx, cy, cw, CARD_H, 3, (ui.theme.surface() & 0x00FFFFFF) | (Math.round(hv * 0xAA) << 24));
 		ui.dashed(cx, cy, cw, CARD_H, color);
 		int textColor = Anim.lerpColor(ui.theme.textMuted(), ui.theme.accent(), hv);
-		ui.textCentered("+ ADD ITEM", cx + cw / 2, cy + CARD_H / 2 - 8, textColor);
+		ui.textCentered("+ Add item", cx + cw / 2, cy + CARD_H / 2 - 8, textColor);
 		ui.textCentered(rules.isEmpty() ? "Choose what to sell" : "Sell another item", cx + cw / 2, cy + CARD_H / 2 + 3, ui.theme.textMuted());
 	}
 

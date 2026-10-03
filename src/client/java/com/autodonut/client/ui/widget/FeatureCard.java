@@ -4,6 +4,8 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import net.minecraft.world.item.ItemStack;
+
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
 
@@ -13,6 +15,7 @@ import com.autodonut.client.ui.Ui;
  * feature's own page.
  */
 public class FeatureCard extends Widget {
+	private final ItemStack icon;
 	private final String title;
 	private final String description;
 	private final Supplier<String> status;
@@ -21,8 +24,9 @@ public class FeatureCard extends Widget {
 	private final Runnable onOpen;
 	private final Anim on;
 
-	public FeatureCard(String title, String description, Supplier<String> status,
+	public FeatureCard(ItemStack icon, String title, String description, Supplier<String> status,
 			BooleanSupplier getter, Consumer<Boolean> setter, Runnable onOpen) {
+		this.icon = icon;
 		this.title = title;
 		this.description = description;
 		this.status = status;
@@ -37,7 +41,7 @@ public class FeatureCard extends Widget {
 	}
 
 	private int switchY() {
-		return y + 7;
+		return y + 9;
 	}
 
 	@Override
@@ -52,18 +56,18 @@ public class FeatureCard extends Widget {
 		float outline = Math.max(k, hv * 0.6f);
 		if (outline > 0.01f) ui.outline(x, y, w, h, 1, Anim.lerpColor(bg, ui.theme.accent(), outline));
 
-		// Icon chip
-		ui.round(x + 7, y + 7, 10, 10, 2, Anim.lerpColor(ui.theme.track(), ui.theme.accent(), k));
-		ui.fill(x + 10, y + 10, x + 14, y + 14, Anim.lerpColor(ui.theme.surface(), ui.theme.onAccent(), k));
+		// Item icon on a soft tile
+		ui.round(x + 6, y + 5, 20, 20, 3, Anim.lerpColor(ui.theme.panel(), ui.theme.accent(), k * 0.18f));
+		ui.item(icon, x + 8, y + 7);
 
-		int textW = w - 22 - ToggleSwitch.WIDTH - 14;
-		ui.text(ui.trim(title.toUpperCase(java.util.Locale.ROOT), textW), x + 22, y + 9, Anim.lerpColor(ui.theme.text(), ui.theme.accent(), k));
+		int textW = w - 32 - ToggleSwitch.WIDTH - 14;
+		ui.text(ui.trim(title, textW), x + 32, y + 11, Anim.lerpColor(ui.theme.text(), ui.theme.accent(), k));
 		java.util.List<String> lines = ui.wrap(description, w - 16);
 		for (int i = 0; i < Math.min(2, lines.size()); i++) {
-			ui.text(lines.get(i), x + 8, y + 24 + i * 10, ui.theme.textMuted());
+			ui.text(lines.get(i), x + 8, y + 31 + i * 10, ui.theme.textMuted());
 		}
 
-		String tag = k > 0.5f ? "ON" : "OFF";
+		String tag = k > 0.5f ? "On" : "Off";
 		int tagColor = k > 0.5f ? ui.theme.success() : ui.theme.textMuted();
 		ui.fill(x + 8, y + h - 19, x + w - 8, y + h - 18, ui.theme.border());
 		ui.text(tag, x + 8, y + h - 13, tagColor);

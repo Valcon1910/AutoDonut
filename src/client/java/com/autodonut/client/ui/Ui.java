@@ -17,7 +17,7 @@ public final class Ui {
 
 	public GuiGraphicsExtractor g;
 	public Font font;
-	public Theme theme = Theme.DARK;
+	public Theme theme = Theme.of(Theme.DARK_BASES.get(0), Theme.ACCENTS.get(0));
 	public float alpha = 1f;
 	public float dt;
 

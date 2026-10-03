@@ -7,14 +7,14 @@ Minecraft **26.3**, Fabric Loader **0.19.5**, Java **25**.
 
 ### Control panel (press **K**)
 - Custom-drawn panel that fades and scales in and out.
-- Dark / light mode switch; all colours blend smoothly when you switch.
+- Dark / light mode plus an **Appearance** page with named colour styles and accent colours; changes blend smoothly.
 - Settings are saved to `config/autodonut.json`.
 
 ### Auto Auction
 Add items you want sold automatically:
 1. **+ Add item**, then search for the item by name.
 2. Enter a **price** (`500`, `1.5k`, `2m`…), either **per item** or **per stack**.
-3. Choose the **quantity** rule (**Exactly**, **Less than**, **More than**) and drag the **Amount** slider (1–64).
+3. Choose the **quantity**: **Exactly** (type a stack size) or **Custom** (drag the minimum and maximum handles).
 4. Turn on the **Enabled** switch.
 
 When a matching stack is in your inventory, AutoDonut selects it (moving it to the hotbar if needed),

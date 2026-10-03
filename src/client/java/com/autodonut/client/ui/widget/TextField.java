@@ -2,10 +2,12 @@ package com.autodonut.client.ui.widget;
 
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.world.item.ItemStack;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
@@ -19,6 +21,7 @@ public class TextField extends Widget {
 	private final Anim focus = new Anim(0, 18);
 	private boolean focused;
 	private boolean searchIcon;
+	private Supplier<ItemStack> icon = () -> ItemStack.EMPTY;
 	private String prefix = "";
 	private String text;
 	private long caretEpoch = System.currentTimeMillis();
@@ -34,6 +37,12 @@ public class TextField extends Widget {
 
 	public TextField searchIcon() {
 		this.searchIcon = true;
+		return this;
+	}
+
+	/** Item shown at the left of the field (replaces the search icon) when not empty. */
+	public TextField icon(Supplier<ItemStack> icon) {
+		this.icon = icon;
 		return this;
 	}
 
@@ -60,7 +69,11 @@ public class TextField extends Widget {
 
 		int tx = x + 6;
 		int ty = y + (h - ui.lineHeight()) / 2 + 1;
-		if (searchIcon) {
+		ItemStack stack = icon.get();
+		if (!stack.isEmpty()) {
+			ui.item(stack, x + 2, y + 1);
+			tx = x + 21;
+		} else if (searchIcon) {
 			int cx = x + 9, cy = y + h / 2 - 1;
 			ui.circle(cx, cy, 3, ui.theme.textMuted());
 			ui.circle(cx, cy, 2, ui.theme.surface());
