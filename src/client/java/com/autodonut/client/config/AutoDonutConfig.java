@@ -34,8 +34,8 @@ public class AutoDonutConfig {
 
 	// Safety
 	public boolean onlyOnDonut = true;
-	public int minDelaySeconds = 8;
-	public int maxDelaySeconds = 25;
+	public int minDelaySeconds = 4;
+	public int maxDelaySeconds = 12;
 	public int maxReactionSeconds = 4;
 	public int maxListingsPerHour = 20;
 	public boolean randomBreaks = true;

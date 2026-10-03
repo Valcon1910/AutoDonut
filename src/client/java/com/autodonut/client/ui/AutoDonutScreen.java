@@ -303,21 +303,21 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private String minDelayWarning() {
-		if (cfg.minDelaySeconds < 8) {
+		if (cfg.minDelaySeconds < 3) {
 			return "Very short minimum delay. Listing every few seconds is much faster than a person "
-					+ "would, and is the easiest pattern for staff or anti-cheat to notice. 8s or more is safer.";
+					+ "would, and is the easiest pattern for staff or anti-cheat to notice. 3s or more is safer.";
 		}
 		return null;
 	}
 
 	private String maxDelayWarning() {
-		if (cfg.maxDelaySeconds < 15) {
+		if (cfg.maxDelaySeconds < 8) {
 			return "Very short maximum delay. Every listing happens within " + cfg.maxDelaySeconds
-					+ "s of the last one, which looks automated. 20s or more is safer.";
+					+ "s of the last one, which looks automated. 10s or more is safer.";
 		}
-		if (cfg.maxDelaySeconds - cfg.minDelaySeconds < 6) {
+		if (cfg.maxDelaySeconds - cfg.minDelaySeconds < 4) {
 			return "Minimum and maximum are almost the same, so listings happen on a near-fixed rhythm. "
-					+ "Leave at least 6s between them so the timing stays irregular.";
+					+ "Leave at least 4s between them so the timing stays irregular.";
 		}
 		return null;
 	}

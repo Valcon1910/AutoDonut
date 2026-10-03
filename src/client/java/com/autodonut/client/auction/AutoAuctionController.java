@@ -248,6 +248,20 @@ public final class AutoAuctionController {
 		status = "Watching inventory";
 	}
 
+	/** Whether any stack still matches a rule, or could be split to match one. */
+	private boolean hasMoreToList(Inventory inv, AutoDonutConfig cfg, long now) {
+		for (int i = 0; i < 36; i++) {
+			ItemStack stack = inv.getItem(i);
+			if (stack.isEmpty()) continue;
+			String id = ItemIndex.idOf(stack.getItem());
+			if (findRule(cfg, id, stack.getCount(), now) != null) return true;
+			for (AuctionRule r : cfg.rules) {
+				if (r.splitAmount(id, stack.getCount()) > 0) return true;
+			}
+		}
+		return false;
+	}
+
 	/** True when the total of any rule item went up since the last check. */
 	private boolean pickedUpNewItem(Inventory inv, AutoDonutConfig cfg) {
 		java.util.Map<String, Integer> counts = new java.util.HashMap<>();
@@ -529,8 +543,13 @@ public final class AutoAuctionController {
 		if (previousSelected >= 0 && previousSelected != inv.getSelectedSlot()) {
 			inv.setSelectedSlot(previousSelected);
 		}
-		nextAllowedAt = now + Math.round(humanizer.nextListingDelay(cfg.minDelaySeconds, cfg.maxDelaySeconds, cfg.randomBreaks)
-				* cfg.listingDelayFactor());
+		if (!unchanged && hasMoreToList(inv, cfg, now)) {
+			// More of the same job waiting: keep going at a quick, still irregular pace (no breaks mid-batch).
+			nextAllowedAt = now + Math.round(humanizer.between(1200, 3500) * cfg.speedFactor());
+		} else {
+			nextAllowedAt = now + Math.round(humanizer.nextListingDelay(cfg.minDelaySeconds, cfg.maxDelaySeconds, cfg.randomBreaks)
+					* cfg.listingDelayFactor());
+		}
 		reset();
 	}
 
