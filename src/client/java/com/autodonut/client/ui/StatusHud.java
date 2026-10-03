@@ -43,8 +43,12 @@ public final class StatusHud {
 		int x = Compat.hudX() - Math.round((1f - v) * 10);
 		int y = 6;
 		UI.card(x, y, w, 16, 8, UI.theme.panel(), UI.theme.border());
-		UI.alpha = Math.max(UI.alpha, 0.61f);
+		// The logo image can't fade, so it stays drawn and the panel's dark shade is laid over it
+		// as the label fades in or out.
+		UI.alpha = 1f;
 		UI.logo(x + 3, y + 2, 12);
+		int shade = Math.round((1f - v) * 255);
+		if (shade > 0) UI.round(x + 3, y + 2, 12, 12, 6, (shade << 24) | (UI.theme.panel() & 0x00FFFFFF));
 		UI.alpha = v * 0.92f;
 		UI.text(label, x + 17, y + 4, UI.theme.text());
 		UI.text(status, x + 17 + UI.width(label) + 8, y + 4, UI.theme.textMuted());
