@@ -55,6 +55,8 @@ public class AutoDonutConfig {
 	public int detectionSpeed = 1;
 	/** Extra horizontal offset for the status label, added to the automatic position. */
 	public int hudOffset = 0;
+	/** Items outside the hotbar: 0 = move them to a free hotbar slot first, 1 = ignore them (hotbar only). */
+	public int inventoryItems = 0;
 
 	/** Multiplier for the wait between listings (Fast lists noticeably sooner). */
 	public float listingDelayFactor() {

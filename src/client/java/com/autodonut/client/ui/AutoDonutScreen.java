@@ -317,6 +317,11 @@ public class AutoDonutScreen extends Screen {
 								new Slider(1, 60, () -> cfg.maxListingsPerHour, v -> cfg.maxListingsPerHour = v, v -> Integer.toString(v)), 110),
 						new SettingRow("Random breaks", "Sometimes pause for a few minutes",
 								toggle(() -> cfg.randomBreaks, v -> cfg.randomBreaks = v), ToggleSwitch.WIDTH),
+						new SettingRow("Inventory items", "Items outside the hotbar; your hand never changes",
+								new Segmented(new String[]{"Move to hotbar", "Hotbar only"}, () -> cfg.inventoryItems, i -> {
+									cfg.inventoryItems = i;
+									AutoDonutConfig.save();
+								}), 150),
 						new SettingRow("Auto-confirm", "Click the confirm button after /ah sell",
 								toggle(() -> cfg.autoConfirm, v -> cfg.autoConfirm = v), ToggleSwitch.WIDTH),
 						new SettingRow("Confirm in background", "Don't show the confirm menu while clicking it",

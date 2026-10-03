@@ -147,7 +147,8 @@ public final class AutoAuctionController {
 		quickRule = r;
 		rule = r;
 		slot = inventorySlot;
-		phase = Phase.PRE_SEND;
+		// REACTING moves a main-inventory stack into a free hotbar slot first if needed.
+		phase = Phase.REACTING;
 		phaseUntil = System.currentTimeMillis();
 		status = "Quick selling";
 	}
@@ -261,8 +262,9 @@ public final class AutoAuctionController {
 			status = "Next listing in " + seconds(nextAllowedAt - now);
 			return;
 		}
+		int scanEnd = cfg.inventoryItems == 1 ? 9 : 36;
 		// First choice: a stack that already matches a rule.
-		for (int i = 0; i < 36; i++) {
+		for (int i = 0; i < scanEnd; i++) {
 			ItemStack stack = inv.getItem(i);
 			if (stack.isEmpty()) continue;
 			AuctionRule match = findRule(cfg, ItemIndex.idOf(stack.getItem()), stack.getCount(), now);
@@ -276,9 +278,9 @@ public final class AutoAuctionController {
 			}
 		}
 		// Otherwise: a stack that is too big; split the wanted amount off it.
-		int empty = emptySlot(inv);
+		int empty = emptySlot(inv, cfg);
 		if (empty >= 0 && player.containerMenu == player.inventoryMenu) {
-			for (int i = 0; i < 36; i++) {
+			for (int i = 0; i < scanEnd; i++) {
 				ItemStack stack = inv.getItem(i);
 				if (stack.isEmpty()) continue;
 				for (AuctionRule r : cfg.rules) {
@@ -333,9 +335,20 @@ public final class AutoAuctionController {
 	}
 
 	/** An empty main-inventory slot (the hotbar is left alone), or -1. */
-	private static int emptySlot(Inventory inv) {
+	private static int emptySlot(Inventory inv, AutoDonutConfig cfg) {
+		int hotbar = freeHotbarSlot(inv);
+		if (hotbar >= 0 || cfg.inventoryItems == 1) return hotbar;
 		for (int i = 9; i < 36; i++) {
 			if (inv.getItem(i).isEmpty()) return i;
+		}
+		return -1;
+	}
+
+	/** An empty hotbar slot that isn't the selected one (the selected slot is never touched), or -1. */
+	private static int freeHotbarSlot(Inventory inv) {
+		int sel = inv.getSelectedSlot();
+		for (int i = 0; i < 9; i++) {
+			if (i != sel && inv.getItem(i).isEmpty()) return i;
 		}
 		return -1;
 	}
@@ -401,8 +414,23 @@ public final class AutoAuctionController {
 
 	private void tickReacting(Minecraft mc, LocalPlayer player, long now) {
 		if (now < phaseUntil) return;
-		if (!stillMatches(player.getInventory().getItem(slot))) {
+		Inventory inv = player.getInventory();
+		if (!stillMatches(inv.getItem(slot))) {
 			reset();
+			return;
+		}
+		if (!Inventory.isHotbarSlot(slot)) {
+			// Never equip it: move it into a free hotbar slot (not the selected one) and list from there.
+			int target = freeHotbarSlot(inv);
+			if (target < 0 || player.containerMenu != player.inventoryMenu
+					|| !InventoryActions.swap(mc, menuSlot(slot), target)) {
+				status = "No free hotbar slot";
+				nextAllowedAt = now + 5000;
+				reset();
+				return;
+			}
+			slot = target;
+			phaseUntil = now + Math.round(humanizer.handling() * AutoDonutConfig.get().speedFactor());
 			return;
 		}
 		phase = Phase.PRE_SEND;
@@ -429,10 +457,7 @@ public final class AutoAuctionController {
 			handMode = 1;
 			return true;
 		}
-		if (InventoryActions.swap(Minecraft.getInstance(), menuSlot(slot), heldSlot)) {
-			handMode = 2;
-			return true;
-		}
+		// Items outside the hotbar are moved to the hotbar first (see tickReacting), never into the hand.
 		return false;
 	}
 
