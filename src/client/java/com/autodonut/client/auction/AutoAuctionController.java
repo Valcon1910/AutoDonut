@@ -417,6 +417,7 @@ public final class AutoAuctionController {
 	 * undoes in the same tick or right after the server answers.
 	 */
 	private boolean putInHand(LocalPlayer player) {
+		if (handMode != 0) return true; // already held
 		Inventory inv = player.getInventory();
 		heldSlot = inv.getSelectedSlot();
 		if (slot == heldSlot) {
@@ -479,8 +480,8 @@ public final class AutoAuctionController {
 
 		serverConfirmed = false;
 		if (cfg.autoConfirm) {
-			// Put things back in the same tick; the item is held again only for the confirm click.
-			restoreHand();
+			// Keep the item held: Donut runs commands a moment after receiving them, so putting it
+			// back now would make it see an empty hand. It's restored once Donut has answered.
 			phase = Phase.AWAIT_CONFIRM;
 			phaseUntil = now + CONFIRM_WAIT_MS;
 			status = "Waiting for confirmation";
