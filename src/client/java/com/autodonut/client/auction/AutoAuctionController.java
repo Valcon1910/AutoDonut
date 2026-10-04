@@ -66,6 +66,7 @@ public final class AutoAuctionController {
 	private Phase phase = Phase.IDLE;
 	/** When the current step started; a step running longer than {@link #STEP_TIMEOUT_MS} is abandoned. */
 	private long phaseStartedAt;
+	private long lastTickAt;
 	private static final long STEP_TIMEOUT_MS = 15_000;
 
 	private void setPhase(Phase next) {
@@ -199,6 +200,19 @@ public final class AutoAuctionController {
 		if (player == null || mc.gameMode == null) {
 			reset();
 			status = "Not in a world";
+			return;
+		}
+		long sinceLastTick = lastTickAt == 0 ? 0 : Math.min(1000, now - lastTickAt);
+		lastTickAt = now;
+		boolean panelOpen = mc.gui.screen() instanceof AutoDonutScreen;
+		boolean midPrompt = phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.HOLDING;
+		if (panelOpen && quickRule == null && !midPrompt) {
+			// Freeze while the AutoDonut panel is open: every timer is pushed back by the time spent.
+			nextAllowedAt += sinceLastTick;
+			phaseUntil += sinceLastTick;
+			phaseStartedAt += sinceLastTick;
+			pausedUntil = pausedUntil > now ? pausedUntil + sinceLastTick : pausedUntil;
+			status = "Paused while AutoDonut is open";
 			return;
 		}
 		if (phase != Phase.IDLE && now - phaseStartedAt > STEP_TIMEOUT_MS) {
@@ -558,8 +572,11 @@ public final class AutoAuctionController {
 		if (screen != null && !(screen instanceof AutoDonutScreen) && !(screen instanceof ChatScreen) && looksLikeSellPrompt(screen)) {
 			confirmScreen = screen;
 			setPhase(Phase.CONFIRMING);
-			// A human needs a moment to find the button.
-			phaseUntil = now + Math.round(humanizer.between(300, 850) * AutoDonutConfig.get().speedFactor());
+			// A visible prompt gets a human-like pause. A hidden one is answered right away: while
+			// any screen is open the game ignores movement and keys, so it must close quickly.
+			phaseUntil = AutoDonutConfig.get().confirmInBackground
+					? now + humanizer.between(40, 110)
+					: now + Math.round(humanizer.between(300, 850) * AutoDonutConfig.get().speedFactor());
 			status = "Confirming listing";
 		} else if (now > phaseUntil) {
 			// No confirmation menu appeared; the listing went through directly.
