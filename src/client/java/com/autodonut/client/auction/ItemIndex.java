@@ -52,6 +52,8 @@ public final class ItemIndex {
 	}
 
 	/** Tag ids ("c:foods") of a stack, as currently sent by the server. */
+	// builtInRegistryHolder() is marked deprecated by Mojang but is the supported way to read an item's tags here.
+	@SuppressWarnings("deprecation")
 	public static Set<String> tagsOf(ItemStack stack) {
 		Set<String> tags = new HashSet<>();
 		stack.getItem().builtInRegistryHolder().tags().forEach(t -> tags.add(t.location().toString()));
