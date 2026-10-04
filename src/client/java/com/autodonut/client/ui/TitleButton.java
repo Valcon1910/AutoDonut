@@ -13,7 +13,7 @@ import com.autodonut.client.AutoDonutClient;
 import com.autodonut.client.config.AutoDonutConfig;
 
 /**
- * AutoDonut button in the bottom-right corner of the title screen, drawn in the panel's own
+ * AutoDonut button in the top-right corner of the title screen, drawn in the panel's own
  * style: a themed rounded tile with the donut logo, the version in a pill to its left, and an
  * "AutoDonut" tooltip. An invisible vanilla button underneath handles clicks and keyboard focus.
  */
@@ -28,7 +28,7 @@ public final class TitleButton {
 
 	public static void add(Minecraft client, Screen screen, int width, int height) {
 		int x = width - SIZE - 4;
-		int y = height - SIZE - 14; // just above Mojang's copyright line
+		int y = 4; // top-right corner
 		Button button = Button.builder(Component.literal("AutoDonut"), b -> {
 			UiSounds.click();
 			client.gui.setScreen(new AutoDonutScreen(screen));
@@ -72,8 +72,8 @@ public final class TitleButton {
 		if (hovered) {
 			UI.tooltip = "AutoDonut";
 			UI.tooltipWarning = false;
-			UI.tooltipX = x - 30;
-			UI.tooltipY = y - 24;
+			UI.tooltipX = x - 40;
+			UI.tooltipY = y + SIZE - 6;
 			UI.drawTooltip(0, 0, graphics.guiWidth(), graphics.guiHeight());
 		}
 	}

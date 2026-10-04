@@ -153,6 +153,12 @@ public final class Ui {
 		if (alpha > 0.6f) g.blit(RenderPipelines.GUI_TEXTURED, LOGO, x, y, 0, 0, size, size, 128, 128, 128, 128);
 	}
 
+	/** Draws a vanilla item texture (textures/item/<name>.png) at 16x16; works even before items are loaded. */
+	public void itemTexture(String name, int x, int y) {
+		if (alpha < 0.6f) return;
+		g.blit(RenderPipelines.GUI_TEXTURED, Identifier.withDefaultNamespace("textures/item/" + name + ".png"), x, y, 0, 0, 16, 16, 16, 16, 16, 16);
+	}
+
 	/** Greedy word wrap. */
 	public List<String> wrap(String text, int maxWidth) {
 		List<String> lines = new ArrayList<>();

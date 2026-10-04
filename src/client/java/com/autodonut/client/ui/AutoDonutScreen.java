@@ -248,22 +248,22 @@ public class AutoDonutScreen extends Screen {
 				}
 				AutoAuctionController auction = AutoAuctionController.get();
 				List<FeatureCard> cards = List.of(
-						new FeatureCard(safeIcon(Items.EMERALD), "Auto Auction", "Lists matching items on /ah for you",
+						new FeatureCard("emerald", "Auto Auction", "Lists matching items on /ah for you",
 								auction::status, () -> cfg.autoAuctionEnabled, v -> {
 									cfg.setAutoAuction(v);
 									AutoDonutConfig.save();
 								}, () -> setPage(Page.AUCTION)).locked(() -> runLocked() || !cfg.hasAuctionItems(), () -> runLocked() ? "Offline" : "No items"),
-						new FeatureCard(safeIcon(Items.GOLD_INGOT), "Quick Sell", "Press its key on a held or hovered item to set a price and sell it",
+						new FeatureCard("gold_ingot", "Quick Sell", "Press its key on a held or hovered item to set a price and sell it",
 								() -> "Key: " + AutoDonutClient.quickSellKeyName(), () -> cfg.quickSellEnabled, v -> {
 									cfg.quickSellEnabled = v;
 									AutoDonutConfig.save();
 								}, null).locked(this::runLocked),
-						new FeatureCard(safeIcon(Items.SPYGLASS), "HUD Status", "Small status label while Auto Auction runs",
+						new FeatureCard("spyglass", "HUD Status", "Small status label while Auto Auction runs",
 								() -> "", () -> cfg.showHud, v -> {
 									cfg.showHud = v;
 									AutoDonutConfig.save();
 								}, null).locked(this::runLocked),
-						new FeatureCard(safeIcon(Items.ENDER_EYE), "Streamer Mode", "Hides AutoDonut from replay mods and recordings: status label, chat messages and sounds",
+						new FeatureCard("ender_eye", "Streamer Mode", "Hides AutoDonut from replay mods and recordings: status label, chat messages and sounds",
 								() -> Compat.hasRecorder() ? "Recording mod found" : "", () -> Compat.streamerMode(), v -> {
 									cfg.streamerMode = v;
 									AutoDonutConfig.save();
@@ -930,18 +930,6 @@ public class AutoDonutScreen extends Screen {
 			int ry = top + i * (SAFETY_ROW_H + SAFETY_GAP) - offset;
 			row.bounds(contentX(), ry, contentW() - (safetyMaxScroll() > 0 ? 6 : 0), SAFETY_ROW_H);
 			row.visible = ry + SAFETY_ROW_H > top && ry < bottom;
-		}
-	}
-
-	/**
-	 * An item icon that is safe to create anywhere: on the title screen items aren't fully
-	 * loaded yet (no world), so it falls back to an empty stack and the card shows the logo.
-	 */
-	private static ItemStack safeIcon(net.minecraft.world.item.Item item) {
-		try {
-			return new ItemStack(item);
-		} catch (RuntimeException e) {
-			return ItemStack.EMPTY;
 		}
 	}
 

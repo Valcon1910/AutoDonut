@@ -4,7 +4,6 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import net.minecraft.world.item.ItemStack;
 
 import com.autodonut.client.ui.Anim;
 import com.autodonut.client.ui.Ui;
@@ -16,7 +15,8 @@ import com.autodonut.client.ui.UiSounds;
  * feature's own page.
  */
 public class FeatureCard extends Widget {
-	private final ItemStack icon;
+	/** Item texture name (e.g. "emerald"), drawn straight from Minecraft's item textures so it works on any screen. */
+	private final String icon;
 	private final String title;
 	private final String description;
 	private final Supplier<String> status;
@@ -27,7 +27,7 @@ public class FeatureCard extends Widget {
 	private BooleanSupplier locked = () -> false;
 	private Supplier<String> lockedLabel = () -> "Offline";
 
-	public FeatureCard(ItemStack icon, String title, String description, Supplier<String> status,
+	public FeatureCard(String icon, String title, String description, Supplier<String> status,
 			BooleanSupplier getter, Consumer<Boolean> setter, Runnable onOpen) {
 		this.icon = icon;
 		this.title = title;
@@ -78,8 +78,7 @@ public class FeatureCard extends Widget {
 
 		// Item icon on a soft tile
 		ui.round(x + 6, y + 5, 20, 20, 3, Anim.lerpColor(ui.theme.panel(), ui.theme.accent(), k * 0.18f));
-		if (icon.isEmpty()) ui.logo(x + 9, y + 8, 14);
-		else ui.item(icon, x + 8, y + 7);
+		ui.itemTexture(icon, x + 8, y + 7);
 
 		int textW = w - 32 - ToggleSwitch.WIDTH - 14;
 		ui.text(ui.trim(title, textW), x + 32, y + 11, Anim.lerpColor(ui.theme.text(), ui.theme.accent(), k));
