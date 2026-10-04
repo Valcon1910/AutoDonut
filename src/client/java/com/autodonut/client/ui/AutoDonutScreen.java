@@ -73,6 +73,11 @@ public class AutoDonutScreen extends Screen {
 	private int hoveredResult = -1;
 	private int lastMouseX, lastMouseY;
 	private boolean lastOffline;
+	private static final int SAFETY_ROW_H = 26;
+	private static final int SAFETY_GAP = 3;
+	private List<SettingRow> safetyRows = List.of();
+	private final Anim safetyScroll = new Anim(0, 18);
+	private float safetyScrollTarget;
 	/** In-panel boot-up: start time (-1 = not booting), results per step (null entry = passed). */
 	private long bootStartedAt = -1;
 	private final List<com.autodonut.client.BootSequence.Failure> bootResults = new ArrayList<>();
@@ -338,13 +343,12 @@ public class AutoDonutScreen extends Screen {
 						new SettingRow("HUD status", "Show what Auto Auction is doing",
 								toggle(() -> cfg.showHud, v -> cfg.showHud = v), ToggleSwitch.WIDTH)
 				);
-				int avail = py + ph - 8 - top;
-				int gap = 3;
-				int rowH = Math.min(26, (avail + gap) / rows.size() - gap);
-				for (int i = 0; i < rows.size(); i++) {
-					rows.get(i).bounds(x, top + i * (rowH + gap), w, rowH);
-					widgets.add(rows.get(i));
-				}
+				// Full-height rows (title + hint); the page scrolls when they don't all fit.
+				safetyRows = rows;
+				safetyScroll.snap(0);
+				safetyScrollTarget = 0;
+				layoutSafetyRows(0);
+				widgets.addAll(rows);
 			}
 			case APPEARANCE -> buildAppearance(x, w, top);
 			case EDIT -> buildEditor(x, w, top);
@@ -599,6 +603,13 @@ public class AutoDonutScreen extends Screen {
 		graphics.pose().translate((1f - pe) * 10f, 0);
 		drawPageDecor();
 		float pageAlpha = ui.alpha;
+		boolean safetyClip = page == Page.SAFETY && safetyMaxScroll() > 0;
+		if (page == Page.SAFETY) {
+			safetyScrollTarget = Math.max(0, Math.min(safetyMaxScroll(), safetyScrollTarget));
+			safetyScroll.set(safetyScrollTarget);
+			layoutSafetyRows(Math.round(safetyScroll.update(ui.dt)));
+		}
+		if (safetyClip) ui.scissor(contentX(), bodyTop(), contentX() + contentW(), py + ph - 8);
 		for (Widget widget : widgets) {
 			if (widget instanceof RangeSlider) {
 				ui.alpha = pageAlpha * Anim.easeInOut(customRow.get());
@@ -622,6 +633,14 @@ public class AutoDonutScreen extends Screen {
 			}
 		}
 		if (revealAt >= 0 && System.currentTimeMillis() - revealAt > 1500) revealAt = -1;
+		if (safetyClip) {
+			ui.endScissor();
+			int track = py + ph - 8 - bodyTop();
+			int content = safetyRows.size() * (SAFETY_ROW_H + SAFETY_GAP) - SAFETY_GAP;
+			int barH = Math.max(16, track * track / content);
+			int barY = bodyTop() + Math.round((track - barH) * (safetyScroll.get() / safetyMaxScroll()));
+			ui.fill(contentX() + contentW() - 2, barY, contentX() + contentW(), barY + barH, ui.theme.track());
+		}
 		if (resultsVisible()) drawResults(mouseX, mouseY);
 		ui.alpha = openProgress;
 		ui.drawTooltip(px + 4, py + 4, px + pw - 4, py + ph - 4);
@@ -837,6 +856,23 @@ public class AutoDonutScreen extends Screen {
 		double phase = (System.currentTimeMillis() % 1600) / 1600.0 * Math.PI * 2;
 		float k = 0.35f + 0.65f * (float) (0.5 + 0.5 * Math.cos(phase));
 		return Anim.lerpColor(Anim.lerpColor(color, ui.theme.sidebar(), 0.7f), color, k);
+	}
+
+	private int safetyMaxScroll() {
+		int content = safetyRows.size() * (SAFETY_ROW_H + SAFETY_GAP) - SAFETY_GAP;
+		return Math.max(0, content - (py + ph - 8 - bodyTop()));
+	}
+
+	/** Positions the Safety rows for the current scroll offset; rows out of view are hidden. */
+	private void layoutSafetyRows(int offset) {
+		int top = bodyTop();
+		int bottom = py + ph - 8;
+		for (int i = 0; i < safetyRows.size(); i++) {
+			SettingRow row = safetyRows.get(i);
+			int ry = top + i * (SAFETY_ROW_H + SAFETY_GAP) - offset;
+			row.bounds(contentX(), ry, contentW() - (safetyMaxScroll() > 0 ? 6 : 0), SAFETY_ROW_H);
+			row.visible = ry + SAFETY_ROW_H > top && ry < bottom;
+		}
 	}
 
 	/** Running features can't be switched on while offline. */
@@ -1161,6 +1197,11 @@ public class AutoDonutScreen extends Screen {
 		if (resultsVisible()) {
 			int max = Math.max(0, results.size() - MAX_RESULTS_SHOWN);
 			resultScroll = Math.max(0, Math.min(max, resultScroll - (int) Math.signum(scrollY)));
+			return true;
+		}
+		if (page == Page.SAFETY && safetyMaxScroll() > 0 && my >= bodyTop() && my < py + ph - 8) {
+			// The wheel scrolls the page here; sliders are still dragged with the mouse.
+			safetyScrollTarget = Math.max(0, Math.min(safetyMaxScroll(), safetyScrollTarget - (float) scrollY * 22));
 			return true;
 		}
 		for (Widget w : widgets) {

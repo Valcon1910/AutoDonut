@@ -61,14 +61,7 @@ public class ToggleSwitch extends Widget {
 		ui.round(x + 1, y + 1, w - 2, h - 2, h / 2 - 1, track);
 		ui.round(x + 2, y + 2, w - 4, (h - 4) / 2, 2, Anim.lerpColor(track, 0xFFFFFFFF, 0.10f));
 
-		// State glyphs inside the track: a check on the left when on, a small ring on the right when off
-		int glyphOn = (0x00FFFFFF & ui.theme.onAccent()) | (Math.round(on * 0xE0) << 24);
-		int gx = x + 5, gy = y + h / 2;
-		ui.fill(gx, gy, gx + 1, gy + 1, glyphOn);
-		ui.fill(gx + 1, gy + 1, gx + 2, gy + 2, glyphOn);
-		ui.fill(gx + 2, gy, gx + 3, gy + 1, glyphOn);
-		ui.fill(gx + 3, gy - 1, gx + 4, gy, glyphOn);
-		ui.fill(gx + 4, gy - 2, gx + 5, gy - 1, glyphOn);
+		// A small ring on the right while off
 		int glyphOff = (0x00FFFFFF & ui.theme.textMuted()) | (Math.round((1 - on) * 0xC0) << 24);
 		int ox = x + w - 8, oy = y + h / 2 - 2;
 		ui.fill(ox + 1, oy, ox + 3, oy + 1, glyphOff);
