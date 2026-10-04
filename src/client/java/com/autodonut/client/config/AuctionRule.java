@@ -52,8 +52,8 @@ public class AuctionRule {
 	/** Short human description of the quantity rule, e.g. "Exactly 64" or "16 to 64". */
 	public String quantityText() {
 		return switch (mode) {
-			case EXACTLY -> "Exactly " + amount;
-			case CUSTOM -> min == max ? "Exactly " + min : min + " to " + max;
+			case EXACTLY -> "Exact " + amount;
+			case CUSTOM -> min == max ? "Exact " + min : min + " to " + max;
 		};
 	}
 
@@ -61,6 +61,8 @@ public class AuctionRule {
 		if (itemId == null) itemId = "";
 		if (priceText == null) priceText = "";
 		if (mode == null) mode = QuantityMode.EXACTLY;
+		// Prices are always for the whole listed stack.
+		pricePerItem = false;
 		amount = Math.clamp(amount, 1, 64);
 		min = Math.clamp(min, 1, 64);
 		max = Math.clamp(max, 1, 64);

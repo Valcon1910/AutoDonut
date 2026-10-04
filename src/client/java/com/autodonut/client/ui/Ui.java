@@ -23,6 +23,8 @@ public final class Ui {
 	/** Tooltip requested this frame; drawn on top by the screen, then cleared. */
 	public String tooltip;
 	public int tooltipX, tooltipY;
+	/** Warning tooltips get an amber edge; plain descriptions use the accent colour. */
+	public boolean tooltipWarning = true;
 
 	public static final int WARNING = 0xFFF5A524;
 
@@ -50,8 +52,9 @@ public final class Ui {
 		x = Math.max(minX, x);
 		y = Math.max(minY, y);
 		round(x + 1, y + 2, w, h, 3, 0x55000000);
-		card(x, y, w, h, 3, theme.surface(), WARNING);
-		fill(x + 1, y + 2, x + 3, y + h - 2, WARNING);
+		int edge = tooltipWarning ? WARNING : theme.accent();
+		card(x, y, w, h, 3, theme.surface(), edge);
+		fill(x + 1, y + 2, x + 3, y + h - 2, edge);
 		for (int i = 0; i < lines.size(); i++) text(lines.get(i), x + 8, y + 5 + i * 10, theme.text());
 		tooltip = null;
 	}

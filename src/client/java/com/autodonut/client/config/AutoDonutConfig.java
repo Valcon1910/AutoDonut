@@ -163,6 +163,8 @@ public class AutoDonutConfig {
 		maxReactionSeconds = Math.clamp(maxReactionSeconds, 1, 15);
 		maxListingsPerHour = Math.clamp(maxListingsPerHour, 1, 60);
 		detectionSpeed = Math.clamp(detectionSpeed, 0, 2);
+		// AutoDonut only ever runs on Donut SMP.
+		onlyOnDonut = true;
 		hudOffset = Math.clamp(hudOffset, -60, 200);
 	}
 }

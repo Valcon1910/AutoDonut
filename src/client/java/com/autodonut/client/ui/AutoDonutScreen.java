@@ -250,11 +250,6 @@ public class AutoDonutScreen extends Screen {
 									cfg.showHud = v;
 									AutoDonutConfig.save();
 								}, null).locked(this::runLocked),
-						new FeatureCard(new ItemStack(Items.SHIELD), "Server Lock", "Only run features while on Donut SMP",
-								() -> ServerContext.isOnDonut() ? "Connected" : "Not connected", () -> cfg.onlyOnDonut, v -> {
-									cfg.onlyOnDonut = v;
-									AutoDonutConfig.save();
-								}, () -> setPage(Page.SAFETY)),
 						new FeatureCard(new ItemStack(Items.ENDER_EYE), "Streamer Mode", "Hides the status label and AutoDonut chat messages",
 								() -> Compat.hasRecorder() ? "Recording mod found" : "", () -> Compat.streamerMode(), v -> {
 									cfg.streamerMode = v;
@@ -269,7 +264,11 @@ public class AutoDonutScreen extends Screen {
 				int rows = (cards.size() + cols - 1) / cols;
 				int ch = Math.min(72, (py + ph - 8 - cardsTop - gap * (rows - 1)) / rows);
 				for (int i = 0; i < cards.size(); i++) {
-					cards.get(i).bounds(x + (i % cols) * (cw + gap), cardsTop + (i / cols) * (ch + gap), cw, ch);
+					int col = i % cols;
+					// The last card stretches over the rest of its row (Streamer Mode gets room to read).
+					int span = i == cards.size() - 1 ? Math.max(1, Math.min(2, cols - col)) : 1;
+					int cardW = cw * span + gap * (span - 1);
+					cards.get(i).bounds(x + col * (cw + gap), cardsTop + (i / cols) * (ch + gap), cardW, ch);
 					widgets.add(cards.get(i));
 				}
 			}
@@ -291,8 +290,6 @@ public class AutoDonutScreen extends Screen {
 			}
 			case SAFETY -> {
 				List<SettingRow> rows = List.of(
-						new SettingRow("Only on Donut SMP", "Stay idle on every other server",
-								toggle(() -> cfg.onlyOnDonut, v -> cfg.onlyOnDonut = v), ToggleSwitch.WIDTH),
 						new SettingRow("Minimum delay", "Shortest wait between listings",
 								new Slider(1, 120, () -> cfg.minDelaySeconds, v -> {
 									cfg.minDelaySeconds = v;
@@ -321,7 +318,10 @@ public class AutoDonutScreen extends Screen {
 								new Segmented(new String[]{"Move to hotbar", "Hotbar only"}, () -> cfg.inventoryItems, i -> {
 									cfg.inventoryItems = i;
 									AutoDonutConfig.save();
-								}), 150),
+								}), 210).info("Move to hotbar: a stack in your main inventory is first moved into a free hotbar "
+										+ "slot (never the one you're holding) and listed from there. Hotbar only: only items already "
+										+ "in your hotbar are listed; the rest of your inventory is left alone. Either way your hand "
+										+ "and selected slot never change."),
 						new SettingRow("Auto-confirm", "Click the confirm button after /ah sell",
 								toggle(() -> cfg.autoConfirm, v -> cfg.autoConfirm = v), ToggleSwitch.WIDTH),
 						new SettingRow("Confirm in background", "Don't show the confirm menu while clicking it",
@@ -396,8 +396,6 @@ public class AutoDonutScreen extends Screen {
 		TextField price = new TextField("e.g. 1.5k or 250000", rule.priceText, 16, PriceFormat::isPriceChar, t -> rule.priceText = t).prefix("$ ");
 		price.bounds(x, top + 42, half, 18);
 		widgets.add(price);
-		widgets.add(new Segmented(new String[]{"Each item", "Whole stack"}, () -> rule.pricePerItem ? 0 : 1,
-				i -> rule.pricePerItem = i == 0).bounds(x + half + 6, top + 42, w - half - 6, 18));
 
 		QuantityMode[] modes = QuantityMode.values();
 		String[] labels = new String[modes.length];
@@ -407,21 +405,21 @@ public class AutoDonutScreen extends Screen {
 				rule.mode = modes[i];
 				rebuildPending = true;
 			}
-		}).bounds(x, top + 75, half, 18));
+		}).bounds(x + half + 6, top + 42, w - half - 6, 18));
 
 		if (rule.mode == QuantityMode.EXACTLY) {
 			TextField amount = new TextField("1 to 64", Integer.toString(rule.amount), 2, Character::isDigit, t -> {
 				if (t.isEmpty()) return;
 				rule.amount = Math.max(1, Math.min(64, Integer.parseInt(t)));
 			}).prefix("Amount  ");
-			amount.bounds(x + half + 6, top + 75, w - half - 6, 18);
+			amount.bounds(x, top + 68, half, 18);
 			widgets.add(amount);
 		} else {
 			widgets.add(new RangeSlider(1, 64, () -> rule.min, v -> rule.min = v, () -> rule.max, v -> rule.max = v)
-					.bounds(x, top + 101, w, 26));
+					.bounds(x, top + 66, w, 26));
 		}
 
-		int by = Math.max(top + 166, py + ph - 26);
+		int by = Math.max(top + 136, py + ph - 26);
 		int doneW = 60;
 		widgets.add(new UiButton("Done", UiButton.Style.PRIMARY, this::finishEditing).bounds(x + w - doneW, by, doneW, 18));
 		widgets.add(new UiButton("Delete", UiButton.Style.DANGER, () -> {
@@ -664,7 +662,7 @@ public class AutoDonutScreen extends Screen {
 		ui.round(vx, by - 6, ui.width(ver) + 8, 12, 3, t.surface());
 		ui.text(ver, vx + 4, by - 3, t.textMuted());
 		boolean online = offlineReason() == null;
-		String state = online ? "Online" : "Offline";
+		String state = online ? "Online  -  Connected to Donut SMP" : "Offline";
 		int sx = vx + ui.width(ver) + 14;
 		ui.circle(sx + 3, by, 2, online ? t.success() : t.danger());
 		ui.text(state, sx + 9, by - 3, online ? t.success() : t.danger());
@@ -798,23 +796,12 @@ public class AutoDonutScreen extends Screen {
 				if (rule == null) return;
 				ui.text("Item", x, top, t.textMuted());
 				ui.text("Price", x, top + 33, t.textMuted());
-				// Info icon explaining the two price modes
-				int ix = x + ui.width("Price") + 4, iy = top + 33;
-				ui.circle(ix + 4, iy + 3, 4, t.track());
-				ui.text("?", ix + 2, iy, t.text());
-				if (lastMouseX >= ix - 1 && lastMouseX < ix + 10 && lastMouseY >= iy - 2 && lastMouseY < iy + 9) {
-					ui.tooltip = "Each item: the price is multiplied by how many items are in the stack "
-							+ "($1k each x 64 = $64k listing). Whole stack: the stack is listed for exactly the price you enter, "
-							+ "whatever its size.";
-					ui.tooltipX = lastMouseX;
-					ui.tooltipY = lastMouseY;
-				}
-				ui.text("Quantity", x, top + 66, t.textMuted());
+				ui.text("Quantity", x + (w - 6) / 2 + 6, top + 33, t.textMuted());
 
 				ItemIndex.Entry entry = ItemIndex.byId(rule.itemId);
 				customRow.set(rule.mode == QuantityMode.CUSTOM ? 1 : 0);
 				float cr = Anim.easeInOut(customRow.update(ui.dt));
-				drawPreview(rule, entry, x, top + 102 + Math.round(cr * 32), w);
+				drawPreview(rule, entry, x, top + 94 + Math.round(cr * 8), w);
 			}
 			case APPEARANCE -> {
 				if (appearanceLabels.length == 2) {
@@ -856,7 +843,7 @@ public class AutoDonutScreen extends Screen {
 	private String offlineReason() {
 		if (Lockdown.active()) return Lockdown.reason();
 		if (cfg.onlyOnDonut && !ServerContext.isOnDonut()) {
-			return "Not connected to Donut SMP. AutoDonut only runs there (you can change this in Safety).";
+			return "Not connected to Donut SMP. AutoDonut only runs there.";
 		}
 		return null;
 	}

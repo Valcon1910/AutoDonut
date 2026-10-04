@@ -41,6 +41,7 @@ public class FeatureCard extends Widget {
 	/** While locked the switch shows off and can't be turned on (e.g. not connected to Donut SMP). */
 	public FeatureCard locked(BooleanSupplier locked) {
 		this.locked = locked;
+		on.snap(shownOn() ? 1 : 0);
 		return this;
 	}
 

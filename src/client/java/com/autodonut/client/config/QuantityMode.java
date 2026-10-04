@@ -3,7 +3,7 @@ package com.autodonut.client.config;
 /** How a stack's size is checked against a rule. */
 public enum QuantityMode {
 	/** The stack must have exactly {@code amount} items. */
-	EXACTLY("Exactly"),
+	EXACTLY("Exact"),
 	/** The stack size must be between {@code min} and {@code max}, inclusive. */
 	CUSTOM("Custom");
 
