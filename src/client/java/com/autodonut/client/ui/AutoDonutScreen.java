@@ -733,7 +733,8 @@ public class AutoDonutScreen extends Screen {
 			int color = i == active ? t.text() : Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
 			ui.text(entry.label(), px + 14 + Math.round(navHover[i].get() * 2), iy + 5, color);
 			if (entry.page() == Page.AUCTION) {
-				ui.circle(px + sw - 14, iy + 9, 2, AutoAuctionController.get().isActive() ? pulse(t.success()) : t.track());
+				activeLight.update(ui.dt);
+				ui.circle(px + sw - 14, iy + 9, 2, activeLightColor());
 			}
 			ui.alpha = baseAlpha;
 		}
@@ -796,15 +797,9 @@ public class AutoDonutScreen extends Screen {
 				String tag = active ? "Running" : cfg.autoAuctionEnabled ? "Waiting" : "Off";
 				int tagColor = active ? t.success() : cfg.autoAuctionEnabled ? t.textMuted() : t.textMuted();
 				ui.text(tag, x + 14 + ui.width("Auto Auction"), top + 7, tagColor);
-				ui.text(ui.trim(auction.status(), w - 50), x + 8, top + 19, t.textMuted());
-
-				int hour = auction.listedLastHour();
-				String count = hour + " / " + cfg.maxListingsPerHour;
-				ui.text("This hour", x + 8, top + 30, t.textMuted());
-				int mx0 = x + 14 + ui.width("This hour");
-				int mw = w - (mx0 - x) - ui.width(count) - 16;
-				ui.meter(mx0, top + 33, mw, hour / (float) cfg.maxListingsPerHour, t.accent());
-				ui.textRight(count, x + w - 8, top + 30, t.text());
+				// Status plus this hour's listings (recounted every frame, so it updates live).
+				String hourText = auction.listedLastHour() + " / " + cfg.maxListingsPerHour + " this hour";
+				ui.text(ui.trim(auction.status() + "  -  " + hourText, w - 50), x + 8, top + 21, t.textMuted());
 			}
 			case EDIT -> {
 				AuctionRule rule = editing;
@@ -856,6 +851,25 @@ public class AutoDonutScreen extends Screen {
 		double phase = (System.currentTimeMillis() % 1600) / 1600.0 * Math.PI * 2;
 		float k = 0.35f + 0.65f * (float) (0.5 + 0.5 * Math.cos(phase));
 		return Anim.lerpColor(Anim.lerpColor(color, ui.theme.sidebar(), 0.7f), color, k);
+	}
+
+	/** Fades from grey to green when Auto Auction turns on, then starts pulsing from full brightness. */
+	private final Anim activeLight = new Anim(AutoAuctionController.get().isActive() ? 1 : 0, 6);
+	private long activeSince = -1;
+
+	private int activeLightColor() {
+		Theme t = ui.theme;
+		boolean active = AutoAuctionController.get().isActive();
+		activeLight.set(active ? 1 : 0);
+		float a = activeLight.get();
+		if (!active || a < 0.999f) {
+			activeSince = -1;
+			return Anim.lerpColor(t.track(), t.success(), a);
+		}
+		if (activeSince < 0) activeSince = System.currentTimeMillis();
+		double phase = ((System.currentTimeMillis() - activeSince) % 1600) / 1600.0 * Math.PI * 2;
+		float k = 0.35f + 0.65f * (float) (0.5 + 0.5 * Math.cos(phase));
+		return Anim.lerpColor(Anim.lerpColor(t.success(), t.sidebar(), 0.7f), t.success(), k);
 	}
 
 	private int safetyMaxScroll() {
