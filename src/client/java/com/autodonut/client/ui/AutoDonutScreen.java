@@ -718,7 +718,7 @@ public class AutoDonutScreen extends Screen {
 			int color = i == active ? t.text() : Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
 			ui.text(entry.label(), px + 14 + Math.round(navHover[i].get() * 2), iy + 5, color);
 			if (entry.page() == Page.AUCTION) {
-				ui.circle(px + sw - 14, iy + 9, 2, AutoAuctionController.get().isActive() ? t.success() : t.track());
+				ui.circle(px + sw - 14, iy + 9, 2, AutoAuctionController.get().isActive() ? pulse(t.success()) : t.track());
 			}
 			ui.alpha = baseAlpha;
 		}
@@ -832,6 +832,13 @@ public class AutoDonutScreen extends Screen {
 			}
 			default -> { }
 		}
+	}
+
+	/** The colour breathing between dim and full brightness (about 1.6s per cycle) for "active" lights. */
+	private int pulse(int color) {
+		double phase = (System.currentTimeMillis() % 1600) / 1600.0 * Math.PI * 2;
+		float k = 0.35f + 0.65f * (float) (0.5 + 0.5 * Math.cos(phase));
+		return Anim.lerpColor(Anim.lerpColor(color, ui.theme.sidebar(), 0.7f), color, k);
 	}
 
 	/** Running features can't be switched on while offline. */
