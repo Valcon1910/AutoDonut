@@ -62,7 +62,7 @@ public final class StatusHud {
 			UI.alpha = v * 0.92f * e;
 			UI.scissor(x, y, x + w - 4, y + 16);
 			UI.text(label, x + 17, y + 4, UI.theme.text());
-			UI.text(status, x + 17 + UI.width(label) + 8, y + 4, UI.theme.textMuted());
+			UI.text(status, x + 17 + UI.width(label) + 8, y + 4, auction.lagging() ? Ui.WARNING : UI.theme.textMuted());
 			UI.endScissor();
 		}
 	}

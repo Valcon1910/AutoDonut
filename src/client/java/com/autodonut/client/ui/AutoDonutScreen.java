@@ -322,8 +322,6 @@ public class AutoDonutScreen extends Screen {
 										: null),
 						new SettingRow("Reaction time", "Max wait after picking up an item",
 								new Slider(1, 15, () -> cfg.maxReactionSeconds, v -> cfg.maxReactionSeconds = v, v -> v + "s"), 110),
-						new SettingRow("Listings per hour", "Hard cap, resets on a rolling hour",
-								new Slider(1, 60, () -> cfg.maxListingsPerHour, v -> cfg.maxListingsPerHour = v, v -> Integer.toString(v)), 110),
 						new SettingRow("Random breaks", "Sometimes pause for a few minutes",
 								toggle(() -> cfg.randomBreaks, v -> cfg.randomBreaks = v), ToggleSwitch.WIDTH),
 						new SettingRow("Inventory items", "",
@@ -360,21 +358,21 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private String minDelayWarning() {
-		if (cfg.minDelaySeconds < 3) {
+		if (cfg.minDelaySeconds < 2) {
 			return "Very short minimum delay. Listing every few seconds is much faster than a person "
-					+ "would, and is the easiest pattern for staff or anti-cheat to notice. 3s or more is safer.";
+					+ "would, and is the easiest pattern for staff or anti-cheat to notice. 2s or more is safer.";
 		}
 		return null;
 	}
 
 	private String maxDelayWarning() {
-		if (cfg.maxDelaySeconds < 8) {
+		if (cfg.maxDelaySeconds < 4) {
 			return "Very short maximum delay. Every listing happens within " + cfg.maxDelaySeconds
-					+ "s of the last one, which looks automated. 10s or more is safer.";
+					+ "s of the last one, which looks automated. 4s or more is safer.";
 		}
-		if (cfg.maxDelaySeconds - cfg.minDelaySeconds < 4) {
+		if (cfg.maxDelaySeconds - cfg.minDelaySeconds < 2) {
 			return "Minimum and maximum are almost the same, so listings happen on a near-fixed rhythm. "
-					+ "Leave at least 4s between them so the timing stays irregular.";
+					+ "Leave at least 2s between them so the timing stays irregular.";
 		}
 		return null;
 	}
@@ -834,7 +832,7 @@ public class AutoDonutScreen extends Screen {
 				int tagColor = active ? t.success() : cfg.autoAuctionEnabled ? t.textMuted() : t.textMuted();
 				ui.text(tag, x + 14 + ui.width("Auto Auction"), top + 7, tagColor);
 				// Status plus this hour's listings (recounted every frame, so it updates live).
-				String hourText = auction.listedLastHour() + " / " + cfg.maxListingsPerHour + " this hour";
+				String hourText = auction.listedLastHour() + " this hour";
 				ui.text(ui.trim(auction.status() + "  -  " + hourText, w - 50), x + 8, top + 21, t.textMuted());
 			}
 			case EDIT -> {

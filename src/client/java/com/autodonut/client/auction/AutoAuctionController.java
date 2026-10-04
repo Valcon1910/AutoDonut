@@ -67,6 +67,31 @@ public final class AutoAuctionController {
 	/** When the current step started; a step running longer than {@link #STEP_TIMEOUT_MS} is abandoned. */
 	private long phaseStartedAt;
 	private long lastTickAt;
+	/** Latest ping to the server (ms) from the player list, and the moment severe lag was last seen. */
+	private int ping;
+	private long laggingUntil;
+	private boolean lagging;
+
+	/** Waits stretch with the ping so listings still complete on a slow connection. */
+	private float lagScale() {
+		return 1f + Math.min(4f, ping / 400f);
+	}
+
+	public boolean lagging() {
+		return lagging;
+	}
+
+	/**
+	 * Severe lag (ping above 1.2s, or the game freezing for more than a second) pauses all
+	 * actions until it has been clear for a few seconds, so nothing is half done when packets
+	 * get lost and the server never kicks for a flood of delayed clicks.
+	 */
+	private void updateLag(LocalPlayer player, long now, long rawGap) {
+		var info = player.connection.getPlayerInfo(player.getUUID());
+		if (info != null) ping = info.getLatency();
+		if (ping > 1200 || rawGap > 1200) laggingUntil = now + 4000;
+		lagging = now < laggingUntil;
+	}
 	private static final long STEP_TIMEOUT_MS = 15_000;
 
 	private void setPhase(Phase next) {
@@ -217,15 +242,22 @@ public final class AutoAuctionController {
 			status = "Not in a world";
 			return;
 		}
-		long sinceLastTick = lastTickAt == 0 ? 0 : Math.min(1000, now - lastTickAt);
+		long rawGap = lastTickAt == 0 ? 0 : now - lastTickAt;
+		long sinceLastTick = Math.min(1000, rawGap);
 		lastTickAt = now;
+		updateLag(player, now, rawGap);
+		if (lagging && quickRule == null && phase != Phase.AWAIT_CONFIRM && phase != Phase.CONFIRMING && phase != Phase.HOLDING) {
+			queue("the lag clears (ping " + ping + "ms)", now, sinceLastTick);
+			status = "Lagging hard (ping " + ping + "ms), paused";
+			return;
+		}
 		boolean panelOpen = mc.gui.screen() instanceof AutoDonutScreen;
 		boolean midPrompt = phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.HOLDING;
 		if (panelOpen && cfg.pauseInPanel && quickRule == null && !midPrompt) {
 			queue("you close AutoDonut", now, sinceLastTick);
 			return;
 		}
-		if (phase != Phase.IDLE && now - phaseStartedAt > STEP_TIMEOUT_MS) {
+		if (phase != Phase.IDLE && now - phaseStartedAt > STEP_TIMEOUT_MS * lagScale()) {
 			// Watchdog: a step that never finished (no prompt, no server answer) is dropped so
 			// Auto Auction can never stay stuck; hand and slot are put back by reset().
 			reset();
@@ -306,11 +338,6 @@ public final class AutoAuctionController {
 	}
 
 	private void tickIdle(LocalPlayer player, AutoDonutConfig cfg, long now) {
-		if (recentListings.size() >= cfg.maxListingsPerHour) {
-			long wait = HOUR_MS - (now - recentListings.peekFirst());
-			status = "Hourly limit reached, resumes in " + seconds(wait);
-			return;
-		}
 		Inventory inv = player.getInventory();
 		if (pickedUpNewItem(inv, cfg)) {
 			// A new matching item arrived: check it after a short reaction instead of waiting out the full delay.
@@ -568,7 +595,7 @@ public final class AutoAuctionController {
 			// Keep the item held: Donut runs commands a moment after receiving them, so putting it
 			// back now would make it see an empty hand. It's restored once Donut has answered.
 			setPhase(Phase.AWAIT_CONFIRM);
-			phaseUntil = now + CONFIRM_WAIT_MS;
+			phaseUntil = now + Math.round(CONFIRM_WAIT_MS * lagScale());
 			status = "Waiting for confirmation";
 		} else {
 			setPhase(Phase.RESTORE);
@@ -653,7 +680,7 @@ public final class AutoAuctionController {
 		if (confirmed && handMode != 0) {
 			// Keep it held (server-side) until Donut reports the listing, then put everything back.
 			setPhase(Phase.HOLDING);
-			holdUntil = now + 1500;
+			holdUntil = now + Math.round(1500 * lagScale());
 		} else {
 			setPhase(Phase.RESTORE);
 			phaseUntil = now + humanizer.between(700, 1400);
@@ -725,7 +752,7 @@ public final class AutoAuctionController {
 	private void tickRestore(Minecraft mc, LocalPlayer player, AutoDonutConfig cfg, long now) {
 		if (now < phaseUntil) return;
 		// Give the server a few seconds to report the listing before judging it.
-		if (!serverConfirmed && now - lastCommandAt < 4000) return;
+		if (!serverConfirmed && now - lastCommandAt < 4000 * lagScale()) return;
 		// Close a confirmation menu the server left open.
 		if (confirmScreen != null && mc.gui.screen() == confirmScreen) {
 			if (confirmScreen instanceof AbstractContainerScreen<?>) player.closeContainer();
@@ -753,7 +780,7 @@ public final class AutoAuctionController {
 
 		if (!unchanged && hasMoreToList(inv, cfg, now)) {
 			// More of the same job waiting: keep going at a quick, still irregular pace (no breaks mid-batch).
-			nextAllowedAt = now + Math.round(humanizer.between(1200, 3500) * cfg.speedFactor());
+			nextAllowedAt = now + Math.round(humanizer.between(600, 1800) * cfg.speedFactor());
 		} else {
 			nextAllowedAt = now + Math.round(humanizer.nextListingDelay(cfg.minDelaySeconds, cfg.maxDelaySeconds, cfg.randomBreaks)
 					* cfg.listingDelayFactor());
