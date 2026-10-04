@@ -14,8 +14,7 @@ import com.autodonut.client.config.AutoDonutConfig;
 
 /**
  * AutoDonut button in the top-right corner of the title screen, drawn in the panel's own
- * style: a themed rounded tile with the donut logo, the version in a pill to its left, and an
- * "AutoDonut" tooltip. An invisible vanilla button underneath handles clicks and keyboard focus.
+ * style: a themed rounded tile with the donut logo, the version in a pill to its left. An invisible vanilla button underneath handles clicks and keyboard focus.
  */
 public final class TitleButton {
 	private static final int SIZE = 20;
@@ -69,12 +68,5 @@ public final class TitleButton {
 		UI.outline(x, y - lift, SIZE, SIZE, 1, Anim.lerpColor(t.border(), t.accent(), h));
 		UI.logo(x + 3, y + 3 - lift, SIZE - 6);
 
-		if (hovered) {
-			UI.tooltip = "AutoDonut";
-			UI.tooltipWarning = false;
-			UI.tooltipX = x - 40;
-			UI.tooltipY = y + SIZE - 6;
-			UI.drawTooltip(0, 0, graphics.guiWidth(), graphics.guiHeight());
-		}
 	}
 }
