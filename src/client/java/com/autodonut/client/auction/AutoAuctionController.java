@@ -105,7 +105,9 @@ public final class AutoAuctionController {
 		if (info != null) ping = info.getLatency();
 		int fps = Minecraft.getInstance().getFps();
 		// Every condition keeps the pause going; it lifts only after 4s of smooth running.
-		if (ping > 1200) lagFor(now, 4000, "Lagging hard (ping " + ping + "ms)");
+		if (now < warmupUntil) {
+			// Joining / loading the world freezes and slows the game briefly; ignore it.
+		} else if (ping > 1200) lagFor(now, 4000, "Lagging hard (ping " + ping + "ms)");
 		else if (rawGap > 1200) lagFor(now, 4000, "Game froze for " + (rawGap / 100) / 10.0 + "s");
 		else if (fps > 0 && fps < 12) lagFor(now, 4000, "Game running slowly (" + fps + " FPS)");
 		lagging = now < laggingUntil;
@@ -258,6 +260,10 @@ public final class AutoAuctionController {
 	/** Called when a world is joined. */
 	public void onJoin() {
 		warmupUntil = System.currentTimeMillis() + 10_000;
+		// Loading the world stalls the game; that isn't lag.
+		lastTickAt = 0;
+		laggingUntil = 0;
+		lagging = false;
 	}
 
 	public void onDisconnect() {
@@ -276,6 +282,7 @@ public final class AutoAuctionController {
 
 		if (player == null || mc.gameMode == null) {
 			reset();
+			lastTickAt = 0;
 			status = "Not in a world";
 			return;
 		}
