@@ -67,6 +67,16 @@ public final class AutoAuctionController {
 	/** When the current step started; a step running longer than {@link #STEP_TIMEOUT_MS} is abandoned. */
 	private long phaseStartedAt;
 	private long lastTickAt;
+	/** Confirmation attempts for the current listing (max {@link #MAX_CONFIRM_ATTEMPTS}, {@link #CONFIRM_RETRY_MS} apart). */
+	private int confirmAttempts;
+	private String lastCommand = "";
+	private static final int MAX_CONFIRM_ATTEMPTS = 3;
+	private static final long CONFIRM_RETRY_MS = 3000;
+
+	/** True while a listing is in progress (not idle / counting down). */
+	public boolean busy() {
+		return phase != Phase.IDLE;
+	}
 	/** Latest ping to the server (ms) from the player list, and the moment severe lag was last seen. */
 	private int ping;
 	private long laggingUntil;
@@ -597,6 +607,8 @@ public final class AutoAuctionController {
 		listedItemId = ItemIndex.idOf(held.getItem());
 		listedCount = held.getCount();
 		lastCommandAt = now;
+		lastCommand = command;
+		confirmAttempts = 1;
 		player.connection.sendCommand(command);
 		recentListings.addLast(now);
 		listedThisSession++;
@@ -606,7 +618,7 @@ public final class AutoAuctionController {
 			// Keep the item held: Donut runs commands a moment after receiving them, so putting it
 			// back now would make it see an empty hand. It's restored once Donut has answered.
 			setPhase(Phase.AWAIT_CONFIRM);
-			phaseUntil = now + Math.round(CONFIRM_WAIT_MS * lagScale());
+			phaseUntil = now + Math.round(CONFIRM_RETRY_MS * lagScale());
 			status = "Waiting for confirmation";
 		} else {
 			setPhase(Phase.RESTORE);
@@ -627,9 +639,20 @@ public final class AutoAuctionController {
 					: now + Math.round(humanizer.between(300, 850) * AutoDonutConfig.get().speedFactor());
 			status = "Confirming listing";
 		} else if (now > phaseUntil) {
-			// No confirmation menu appeared; the listing went through directly.
-			setPhase(Phase.RESTORE);
-			phaseUntil = now + humanizer.between(300, 900);
+			LocalPlayer player = mc.player;
+			boolean itemStillThere = player != null && !serverConfirmed && stillMatches(sourceStack(player));
+			if (itemStillThere && confirmAttempts < MAX_CONFIRM_ATTEMPTS) {
+				// No prompt yet and nothing listed: try again (at most 3 times, 3s apart).
+				confirmAttempts++;
+				lastCommandAt = now;
+				player.connection.sendCommand(lastCommand);
+				phaseUntil = now + Math.round(CONFIRM_RETRY_MS * lagScale());
+				status = "Retrying confirmation (" + confirmAttempts + "/" + MAX_CONFIRM_ATTEMPTS + ")";
+			} else {
+				// Listed directly without a prompt, or out of attempts.
+				setPhase(Phase.RESTORE);
+				phaseUntil = now + humanizer.between(300, 900);
+			}
 		}
 	}
 
@@ -691,7 +714,7 @@ public final class AutoAuctionController {
 		if (confirmed && handMode != 0) {
 			// Keep it held (server-side) until Donut reports the listing, then put everything back.
 			setPhase(Phase.HOLDING);
-			holdUntil = now + Math.round(1500 * lagScale());
+			holdUntil = now + Math.round(CONFIRM_RETRY_MS * lagScale());
 		} else {
 			setPhase(Phase.RESTORE);
 			phaseUntil = now + humanizer.between(700, 1400);
@@ -700,6 +723,15 @@ public final class AutoAuctionController {
 
 	private void tickHolding(long now) {
 		if (!serverConfirmed && now < holdUntil) return;
+		Screen open = Minecraft.getInstance().gui.screen();
+		if (!serverConfirmed && confirmAttempts < MAX_CONFIRM_ATTEMPTS && open != null && open == confirmScreen) {
+			// The prompt is still there 3s after clicking: click it again.
+			confirmAttempts++;
+			setPhase(Phase.CONFIRMING);
+			phaseUntil = now + humanizer.between(40, 110);
+			status = "Retrying confirmation (" + confirmAttempts + "/" + MAX_CONFIRM_ATTEMPTS + ")";
+			return;
+		}
 		restoreHand();
 		setPhase(Phase.RESTORE);
 		phaseUntil = now + humanizer.between(300, 700);
