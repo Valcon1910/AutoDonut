@@ -2,7 +2,9 @@ package com.autodonut.client.ui;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractButton;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.input.InputWithModifiers;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -14,7 +16,7 @@ import com.autodonut.client.config.AutoDonutConfig;
 
 /**
  * AutoDonut button in the top-right corner of the title screen, drawn in the panel's own
- * style: a themed rounded tile with the donut logo, the version in a pill to its left. An invisible vanilla button underneath handles clicks and keyboard focus.
+ * style: a themed rounded tile with the donut logo, the version in a pill to its left. A click area underneath handles the click; it draws nothing itself, so the title screen's fade-in and focus outline never show through.
  */
 public final class TitleButton {
 	private static final int SIZE = 20;
@@ -28,12 +30,10 @@ public final class TitleButton {
 	public static void add(Minecraft client, Screen screen, int width, int height) {
 		int x = width - SIZE - 4;
 		int y = 4; // top-right corner
-		Button button = Button.builder(Component.literal("AutoDonut"), b -> {
+		Screens.getWidgets(screen).add(new HitArea(x, y, () -> {
 			UiSounds.click();
 			client.gui.setScreen(new AutoDonutScreen(screen));
-		}).bounds(x, y, SIZE, SIZE).build();
-		button.setAlpha(0f);
-		Screens.getWidgets(screen).add(button);
+		}));
 
 		ScreenEvents.afterExtract(screen).register((s, graphics, mouseX, mouseY, delta) ->
 				draw(client, graphics, x, y, mouseX >= x && mouseX < x + SIZE && mouseY >= y && mouseY < y + SIZE));
@@ -68,5 +68,36 @@ public final class TitleButton {
 		UI.outline(x, y - lift, SIZE, SIZE, 1, Anim.lerpColor(t.border(), t.accent(), h));
 		UI.logo(x + 3, y + 3 - lift, SIZE - 6);
 
+	}
+
+	/** Clickable area with no visuals of its own (everything is drawn by {@link #draw}). */
+	private static final class HitArea extends AbstractButton {
+		private final Runnable action;
+
+		HitArea(int x, int y, Runnable action) {
+			super(x, y, SIZE, SIZE, Component.literal("AutoDonut"));
+			this.action = action;
+			super.setAlpha(0f);
+		}
+
+		/** The title screen fades every widget in by setting its alpha; this one always stays invisible. */
+		@Override
+		public void setAlpha(float alpha) {
+			super.setAlpha(0f);
+		}
+
+		@Override
+		public void onPress(InputWithModifiers input) {
+			action.run();
+		}
+
+		@Override
+		protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+			// Intentionally empty: the themed tile is drawn by TitleButton.draw.
+		}
+
+		@Override
+		protected void updateWidgetNarration(NarrationElementOutput output) {
+		}
 	}
 }
