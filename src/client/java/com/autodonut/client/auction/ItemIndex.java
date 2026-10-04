@@ -54,7 +54,7 @@ public final class ItemIndex {
 	/** Tag ids ("c:foods") of a stack, as currently sent by the server. */
 	public static Set<String> tagsOf(ItemStack stack) {
 		Set<String> tags = new HashSet<>();
-		stack.getTags().forEach(t -> tags.add(t.location().toString()));
+		stack.getItem().builtInRegistryHolder().tags().forEach(t -> tags.add(t.location().toString()));
 		return tags;
 	}
 
