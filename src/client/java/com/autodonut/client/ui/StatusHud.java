@@ -29,7 +29,7 @@ public final class StatusHud {
 
 		boolean noResponse = !com.autodonut.client.ServerProbe.responding();
 		boolean active = cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active()
-				&& (auction.isActive() || noResponse) && mc.player != null;
+				&& (auction.isActive() || auction.quickSelling() || auction.lagging() || noResponse) && mc.player != null;
 		// With a screen open (inventory, chat, ...) the label folds down to just the logo badge.
 		boolean expanded = active && mc.gui.screen() == null;
 		VISIBLE.set(active ? 1 : 0);

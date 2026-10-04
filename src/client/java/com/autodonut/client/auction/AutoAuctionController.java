@@ -91,6 +91,11 @@ public final class AutoAuctionController {
 		return 1f + Math.min(4f, ping / 400f);
 	}
 
+	/** True while a Quick Sell is running. */
+	public boolean quickSelling() {
+		return quickRule != null;
+	}
+
 	public boolean lagging() {
 		return lagging;
 	}
@@ -236,14 +241,19 @@ public final class AutoAuctionController {
 		}
 	}
 
-	/** "Continue now" key: skips whatever wait is left before the next step. Pauses (panel, combat, lag) still apply. */
+	/** "Continue now" key: force-resets every timer and every paused / disabled item. */
 	public void skipWait() {
 		long now = System.currentTimeMillis();
-		if (phase == Phase.IDLE) {
-			nextAllowedAt = now;
-		} else if (phase == Phase.REACTING || phase == Phase.SPLITTING || phase == Phase.PRE_SEND) {
-			phaseUntil = now;
-		}
+		nextAllowedAt = now;
+		if (phase == Phase.REACTING || phase == Phase.SPLITTING || phase == Phase.PRE_SEND) phaseUntil = now;
+		pausedUntil = 0;
+		combatUntil = 0;
+		warmupUntil = 0;
+		laggingUntil = 0;
+		lagging = false;
+		failures.clear();
+		rulePausedUntil.clear();
+		status = "Timers reset";
 		com.autodonut.client.ui.UiSounds.click();
 	}
 
@@ -363,11 +373,16 @@ public final class AutoAuctionController {
 			tickHolding(now);
 			return;
 		}
-		boolean otherMenuOpen = mc.gui.screen() != null && !(mc.gui.screen() instanceof AutoDonutScreen);
-		if (cfg.pauseInMenus && otherMenuOpen) {
-			// Push pending steps back so nothing fires the instant the menu closes.
-			phaseUntil = Math.max(phaseUntil, now + humanizer.between(400, 1200));
-			status = "Paused while a menu is open";
+		Screen open = mc.gui.screen();
+		boolean otherMenuOpen = open != null && !(open instanceof AutoDonutScreen) && open != confirmScreen
+				&& !(open instanceof com.autodonut.client.ui.QuickSellScreen);
+		if (cfg.pauseInMenus && otherMenuOpen && quickRule == null && phase != Phase.RESTORE) {
+			// Freeze: every timer stands still while a chest or menu is open and resumes where it
+			// left off once it closes, so playing normally never races a listing.
+			nextAllowedAt += sinceLastTick;
+			phaseUntil += sinceLastTick;
+			phaseStartedAt += sinceLastTick;
+			status = "Frozen while a menu is open";
 			return;
 		}
 		while (!recentListings.isEmpty() && now - recentListings.peekFirst() > HOUR_MS) {
