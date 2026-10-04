@@ -28,9 +28,7 @@ public final class StatusHud {
 		lastFrame = now;
 
 		boolean active = cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active()
-				&& auction.isActive() && mc.player != null
-				// Hidden while a listing is being worked on; back once it's done or counting down.
-				&& !auction.busy();
+				&& auction.isActive() && mc.player != null;
 		// With a screen open (inventory, chat, ...) the label folds down to just the logo badge.
 		boolean expanded = active && mc.gui.screen() == null;
 		VISIBLE.set(active ? 1 : 0);
