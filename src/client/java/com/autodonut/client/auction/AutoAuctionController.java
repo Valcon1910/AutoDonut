@@ -287,7 +287,7 @@ public final class AutoAuctionController {
 			queue("the lag clears (ping " + ping + "ms)", now, sinceLastTick);
 			// Never leave an item "held" while waiting out lag.
 			if (phase == Phase.RESTORE) restoreHand();
-			status = lagReason + ", paused until it runs smoothly";
+			status = "Server not responding (Lag)";
 			return;
 		}
 		boolean panelOpen = mc.gui.screen() instanceof AutoDonutScreen;
