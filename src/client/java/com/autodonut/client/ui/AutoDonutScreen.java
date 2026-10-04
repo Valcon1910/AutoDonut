@@ -240,8 +240,8 @@ public class AutoDonutScreen extends Screen {
 									cfg.setAutoAuction(v);
 									AutoDonutConfig.save();
 								}, () -> setPage(Page.AUCTION)).locked(this::runLocked),
-						new FeatureCard(new ItemStack(Items.GOLD_INGOT), "Quick Sell", "Press R on a held or hovered item to open Donut's sell screen",
-								() -> "Key: R", () -> cfg.quickSellEnabled, v -> {
+						new FeatureCard(new ItemStack(Items.GOLD_INGOT), "Quick Sell", "Press its key on a held or hovered item to set a price and sell it",
+								() -> "Key: " + AutoDonutClient.quickSellKeyName(), () -> cfg.quickSellEnabled, v -> {
 									cfg.quickSellEnabled = v;
 									AutoDonutConfig.save();
 								}, null).locked(this::runLocked),

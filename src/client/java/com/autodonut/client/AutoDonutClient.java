@@ -37,6 +37,11 @@ public class AutoDonutClient implements ClientModInitializer {
 		return openKey;
 	}
 
+	/** The key currently bound to Quick Sell, as shown in Controls (e.g. "R"). */
+	public static String quickSellKeyName() {
+		return quickSellKey == null ? "R" : quickSellKey.getTranslatedKeyMessage().getString();
+	}
+
 	public static String version() {
 		return version;
 	}

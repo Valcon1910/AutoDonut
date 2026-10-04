@@ -61,7 +61,7 @@ public final class QuickSell {
 		if (screen instanceof AbstractContainerScreen<?> container) {
 			Slot hovered = ((AbstractContainerScreenAccessor) container).autodonut$getHoveredSlot();
 			if (hovered == null || !hovered.hasItem() || !(hovered.container instanceof Inventory)) {
-				hint(player, "Hover over an item in your inventory, then press R.");
+				hint(player, "Hover over an item in your inventory, then press " + AutoDonutClient.quickSellKeyName() + ".");
 				return;
 			}
 			index = hovered.getContainerSlot();
@@ -74,7 +74,7 @@ public final class QuickSell {
 		} else {
 			index = inv.getSelectedSlot();
 			if (inv.getItem(index).isEmpty()) {
-				hint(player, "Hold the item you want to sell, then press R.");
+				hint(player, "Hold the item you want to sell, then press " + AutoDonutClient.quickSellKeyName() + ".");
 				return;
 			}
 		}
