@@ -206,7 +206,7 @@ public final class AutoAuctionController {
 		lastTickAt = now;
 		boolean panelOpen = mc.gui.screen() instanceof AutoDonutScreen;
 		boolean midPrompt = phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.HOLDING;
-		if (panelOpen && quickRule == null && !midPrompt) {
+		if (panelOpen && cfg.pauseInPanel && quickRule == null && !midPrompt) {
 			// Freeze while the AutoDonut panel is open: every timer is pushed back by the time spent.
 			nextAllowedAt += sinceLastTick;
 			phaseUntil += sinceLastTick;
@@ -574,7 +574,7 @@ public final class AutoAuctionController {
 			setPhase(Phase.CONFIRMING);
 			// A visible prompt gets a human-like pause. A hidden one is answered right away: while
 			// any screen is open the game ignores movement and keys, so it must close quickly.
-			phaseUntil = AutoDonutConfig.get().confirmInBackground
+			phaseUntil = AutoDonutConfig.get().confirmInBackground && AutoDonutConfig.get().instantBackgroundConfirm
 					? now + humanizer.between(40, 110)
 					: now + Math.round(humanizer.between(300, 850) * AutoDonutConfig.get().speedFactor());
 			status = "Confirming listing";

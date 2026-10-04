@@ -43,6 +43,10 @@ public class AutoDonutConfig {
 	public boolean showHud = true;
 	public boolean autoConfirm = true;
 	public boolean confirmInBackground = true;
+	/** Answer hidden confirm prompts right away (keeps the moment inputs are blocked tiny). */
+	public boolean instantBackgroundConfirm = true;
+	/** Freeze Auto Auction while the AutoDonut panel is open. */
+	public boolean pauseInPanel = true;
 	public boolean streamerMode = false;
 	/** Quick Sell: pressing R opens Donut's own sell screen for the held item. */
 	public boolean quickSellEnabled = true;
@@ -97,6 +101,8 @@ public class AutoDonutConfig {
 		showHud = d.showHud;
 		autoConfirm = d.autoConfirm;
 		confirmInBackground = d.confirmInBackground;
+		instantBackgroundConfirm = d.instantBackgroundConfirm;
+		pauseInPanel = d.pauseInPanel;
 		detectionSpeed = d.detectionSpeed;
 		inventoryItems = d.inventoryItems;
 	}
