@@ -78,7 +78,8 @@ public class FeatureCard extends Widget {
 
 		// Item icon on a soft tile
 		ui.round(x + 6, y + 5, 20, 20, 3, Anim.lerpColor(ui.theme.panel(), ui.theme.accent(), k * 0.18f));
-		ui.item(icon, x + 8, y + 7);
+		if (icon.isEmpty()) ui.logo(x + 9, y + 8, 14);
+		else ui.item(icon, x + 8, y + 7);
 
 		int textW = w - 32 - ToggleSwitch.WIDTH - 14;
 		ui.text(ui.trim(title, textW), x + 32, y + 11, Anim.lerpColor(ui.theme.text(), ui.theme.accent(), k));
