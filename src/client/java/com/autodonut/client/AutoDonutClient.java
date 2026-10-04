@@ -48,6 +48,7 @@ public class AutoDonutClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		LogFilter.install();
 		AutoDonutConfig.load();
 		version = FabricLoader.getInstance().getModContainer(AutoDonut.MOD_ID)
 				.map(c -> c.getMetadata().getVersion().getFriendlyString())
