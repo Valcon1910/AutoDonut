@@ -22,11 +22,13 @@ import com.autodonut.client.config.AutoDonutConfig;
 import com.autodonut.client.ui.AutoDonutScreen;
 import com.autodonut.client.ui.BootOverlay;
 import com.autodonut.client.ui.StatusHud;
+import com.autodonut.client.ui.TitleButton;
 
 public class AutoDonutClient implements ClientModInitializer {
 	private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(id("main"));
 	private static KeyMapping openKey;
 	private static KeyMapping quickSellKey;
+	private static KeyMapping skipKey;
 	private static String version = "dev";
 
 	public static Identifier id(String path) {
@@ -40,6 +42,11 @@ public class AutoDonutClient implements ClientModInitializer {
 	/** The key currently bound to Quick Sell, as shown in Controls (e.g. "R"). */
 	public static String quickSellKeyName() {
 		return quickSellKey == null ? "R" : quickSellKey.getTranslatedKeyMessage().getString();
+	}
+
+	/** The key bound to "continue now" (default Y). */
+	public static String skipKeyName() {
+		return skipKey == null ? "Y" : skipKey.getTranslatedKeyMessage().getString();
 	}
 
 	public static String version() {
@@ -67,6 +74,17 @@ public class AutoDonutClient implements ClientModInitializer {
 				InputConstants.KEY_R,
 				CATEGORY
 		));
+
+		skipKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+				"key.autodonut.skip_wait",
+				InputConstants.Type.KEYBOARD,
+				InputConstants.KEY_Y,
+				CATEGORY
+		));
+
+		ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
+			if (screen instanceof net.minecraft.client.gui.screens.TitleScreen) TitleButton.add(client, screen, w, h);
+		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
 		// Inside inventories key mappings don't fire, so listen for R on every screen.
@@ -103,6 +121,9 @@ public class AutoDonutClient implements ClientModInitializer {
 		}
 		while (quickSellKey.consumeClick()) {
 			if (client.gui.screen() == null) QuickSell.trigger(client);
+		}
+		while (skipKey.consumeClick()) {
+			if (client.gui.screen() == null && AutoDonutConfig.get().skipKeyEnabled) AutoAuctionController.get().skipWait();
 		}
 		QuickSell.tick(client);
 		if (client.player == null && !(client.gui.screen() instanceof net.minecraft.client.gui.screens.ConnectScreen)) {

@@ -47,6 +47,8 @@ public class AutoDonutConfig {
 	public boolean instantBackgroundConfirm = true;
 	/** Freeze Auto Auction while the AutoDonut panel is open. */
 	public boolean pauseInPanel = true;
+	/** The "continue now" key (default Y) skips the remaining wait before the next listing. */
+	public boolean skipKeyEnabled = true;
 	public boolean streamerMode = false;
 	/** Quick Sell: pressing R opens Donut's own sell screen for the held item. */
 	public boolean quickSellEnabled = true;
@@ -103,6 +105,7 @@ public class AutoDonutConfig {
 		confirmInBackground = d.confirmInBackground;
 		instantBackgroundConfirm = d.instantBackgroundConfirm;
 		pauseInPanel = d.pauseInPanel;
+		skipKeyEnabled = d.skipKeyEnabled;
 		detectionSpeed = d.detectionSpeed;
 		inventoryItems = d.inventoryItems;
 	}

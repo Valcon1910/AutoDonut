@@ -113,8 +113,16 @@ public class AutoDonutScreen extends Screen {
 	private float uiScale = 1f;
 	private int vw, vh;
 
+	/** Screen to return to on close (e.g. the title screen), or null in-game. */
+	private final Screen parent;
+
 	public AutoDonutScreen() {
+		this(null);
+	}
+
+	public AutoDonutScreen(Screen parent) {
 		super(Component.literal("AutoDonut"));
+		this.parent = parent;
 		themeTo = Theme.current(cfg);
 		UiSounds.open();
 		themeFrom = themeTo;
@@ -336,6 +344,8 @@ public class AutoDonutScreen extends Screen {
 								toggle(() -> cfg.autoConfirm, v -> cfg.autoConfirm = v), ToggleSwitch.WIDTH),
 						new SettingRow("Confirm in background", "Don't show the confirm menu while clicking it",
 								toggle(() -> cfg.confirmInBackground, v -> cfg.confirmInBackground = v), ToggleSwitch.WIDTH),
+						new SettingRow("Continue now key", "Press " + AutoDonutClient.skipKeyName() + " to skip the wait before the next listing",
+								toggle(() -> cfg.skipKeyEnabled, v -> cfg.skipKeyEnabled = v), ToggleSwitch.WIDTH),
 						new SettingRow("Instant background confirm", "Answer hidden prompts at once so you're never blocked",
 								toggle(() -> cfg.instantBackgroundConfirm, v -> cfg.instantBackgroundConfirm = v), ToggleSwitch.WIDTH),
 						new SettingRow("Wait in AutoDonut panel", "Timers keep running; actions wait until you close it",
@@ -1378,7 +1388,7 @@ public class AutoDonutScreen extends Screen {
 	public void tick() {
 		super.tick();
 		if (closingAt >= 0 && (System.nanoTime() - closingAt) / 1_000_000f >= CLOSE_MS) {
-			minecraft.gui.setScreen(null);
+			minecraft.gui.setScreen(parent);
 		}
 	}
 

@@ -207,6 +207,17 @@ public final class AutoAuctionController {
 		}
 	}
 
+	/** "Continue now" key: skips whatever wait is left before the next step. Pauses (panel, combat, lag) still apply. */
+	public void skipWait() {
+		long now = System.currentTimeMillis();
+		if (phase == Phase.IDLE) {
+			nextAllowedAt = now;
+		} else if (phase == Phase.REACTING || phase == Phase.SPLITTING || phase == Phase.PRE_SEND) {
+			phaseUntil = now;
+		}
+		com.autodonut.client.ui.UiSounds.click();
+	}
+
 	public void reset() {
 		restoreHand();
 		confirmScreen = null;
