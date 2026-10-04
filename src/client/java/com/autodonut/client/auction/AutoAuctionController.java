@@ -48,7 +48,11 @@ public final class AutoAuctionController {
 	private static final long FAILURE_PAUSE_MS = 10L * 60L * 1000L;
 	private static final long SERVER_REFUSAL_PAUSE_MS = 5L * 60L * 1000L;
 	private static final String[] REFUSAL_WORDS = {
-			"limit", "maximum", "too many", "cannot", "can't", "not allowed", "cooldown", "invalid", "you must"
+			"limit", "maximum", "too many", "cannot", "can't", "not allowed", "invalid", "you must"
+	};
+	/** Server replies meaning commands are being throttled (lag / rate limit): handled as lag, not a refusal. */
+	private static final String[] THROTTLE_WORDS = {
+			"too fast", "slow down", "please wait", "cooldown", "try again in", "wait before", "rate limit", "spam"
 	};
 
 	private enum Phase { IDLE, SPLITTING, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, HOLDING, RESTORE }
@@ -99,8 +103,20 @@ public final class AutoAuctionController {
 	private void updateLag(LocalPlayer player, long now, long rawGap) {
 		var info = player.connection.getPlayerInfo(player.getUUID());
 		if (info != null) ping = info.getLatency();
-		if (ping > 1200 || rawGap > 1200) laggingUntil = now + 4000;
+		int fps = Minecraft.getInstance().getFps();
+		// Every condition keeps the pause going; it lifts only after 4s of smooth running.
+		if (ping > 1200) lagFor(now, 4000, "Lagging hard (ping " + ping + "ms)");
+		else if (rawGap > 1200) lagFor(now, 4000, "Game froze for " + (rawGap / 100) / 10.0 + "s");
+		else if (fps > 0 && fps < 12) lagFor(now, 4000, "Game running slowly (" + fps + " FPS)");
 		lagging = now < laggingUntil;
+		if (!lagging) lagReason = "";
+	}
+
+	private String lagReason = "";
+
+	private void lagFor(long now, long ms, String reason) {
+		laggingUntil = Math.max(laggingUntil, now + ms);
+		lagReason = reason;
 	}
 	private static final long STEP_TIMEOUT_MS = 15_000;
 
@@ -269,7 +285,9 @@ public final class AutoAuctionController {
 		updateLag(player, now, rawGap);
 		if (lagging && quickRule == null && phase != Phase.AWAIT_CONFIRM && phase != Phase.CONFIRMING && phase != Phase.HOLDING) {
 			queue("the lag clears (ping " + ping + "ms)", now, sinceLastTick);
-			status = "Lagging hard (ping " + ping + "ms), paused";
+			// Never leave an item "held" while waiting out lag.
+			if (phase == Phase.RESTORE) restoreHand();
+			status = lagReason + ", paused until it runs smoothly";
 			return;
 		}
 		boolean panelOpen = mc.gui.screen() instanceof AutoDonutScreen;
@@ -649,7 +667,9 @@ public final class AutoAuctionController {
 				phaseUntil = now + Math.round(CONFIRM_RETRY_MS * lagScale());
 				status = "Retrying confirmation (" + confirmAttempts + "/" + MAX_CONFIRM_ATTEMPTS + ")";
 			} else {
-				// Listed directly without a prompt, or out of attempts.
+				// Listed directly without a prompt, or out of attempts. Out of attempts with no
+				// answer at all means commands aren't getting through: pause like lag.
+				if (itemStillThere) lagFor(now, 10_000, "Server isn't answering commands (lag)");
 				setPhase(Phase.RESTORE);
 				phaseUntil = now + humanizer.between(300, 900);
 			}
@@ -846,6 +866,13 @@ public final class AutoAuctionController {
 		}
 		if (overlay) return;
 		if (lastCommandAt == 0 || now - lastCommandAt > 6000) return;
+		for (String w : THROTTLE_WORDS) {
+			if (lower.contains(w)) {
+				lagFor(now, 10_000, "Commands are being blocked (server lag)");
+				lagging = true;
+				return;
+			}
+		}
 		if (lower.contains("you listed") || lower.contains("listed for") || lower.contains("put up for auction")) {
 			serverConfirmed = true;
 			if (rule != null) failures.remove(rule);
