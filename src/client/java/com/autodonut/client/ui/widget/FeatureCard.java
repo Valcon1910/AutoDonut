@@ -25,6 +25,7 @@ public class FeatureCard extends Widget {
 	private final Runnable onOpen;
 	private final Anim on;
 	private BooleanSupplier locked = () -> false;
+	private Supplier<String> lockedLabel = () -> "Offline";
 
 	public FeatureCard(ItemStack icon, String title, String description, Supplier<String> status,
 			BooleanSupplier getter, Consumer<Boolean> setter, Runnable onOpen) {
@@ -43,6 +44,12 @@ public class FeatureCard extends Widget {
 		this.locked = locked;
 		on.snap(shownOn() ? 1 : 0);
 		return this;
+	}
+
+	/** Same as {@link #locked(BooleanSupplier)}, with a custom label shown while locked. */
+	public FeatureCard locked(BooleanSupplier locked, Supplier<String> label) {
+		this.lockedLabel = label;
+		return locked(locked);
 	}
 
 	private boolean shownOn() {
@@ -81,7 +88,7 @@ public class FeatureCard extends Widget {
 			ui.text(lines.get(i), x + 8, y + 27 + i * 10, ui.theme.textMuted());
 		}
 
-		String tag = locked.getAsBoolean() ? "Offline" : k > 0.5f ? "On" : "Off";
+		String tag = locked.getAsBoolean() ? lockedLabel.get() : k > 0.5f ? "On" : "Off";
 		int tagColor = k > 0.5f ? ui.theme.success() : ui.theme.textMuted();
 		ui.fill(x + 8, y + h - 19, x + w - 8, y + h - 18, ui.theme.border());
 		ui.text(tag, x + 8, y + h - 13, tagColor);

@@ -90,6 +90,7 @@ public class AutoDonutClient implements ClientModInitializer {
 		ClientPlayConnectionEvents.JOIN.register((listener, sender, client) -> {
 			ServerContext.onJoin(client.getSingleplayerServer() != null);
 			com.autodonut.client.auction.ItemIndex.clearTags();
+			AutoAuctionController.get().onJoin();
 			BootOverlay.onJoin();
 		});
 	}

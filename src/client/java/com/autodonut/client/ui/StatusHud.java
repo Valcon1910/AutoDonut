@@ -46,7 +46,8 @@ public final class StatusHud {
 		int fullW = 18 + UI.width(label) + 8 + UI.width(status) + 8;
 		int w = 18 + Math.round((fullW - 18) * e);
 		// Leave room for a top-left minimap (Xaero's, JourneyMap, VoxelMap).
-		int x = Compat.hudX() - Math.round((1f - v) * 10);
+		// Slides left as it fades out, and a little left again when it folds into the badge.
+		int x = Compat.hudX() - Math.round((1f - v) * 10) - Math.round((1f - e) * 6);
 		int y = 6;
 		UI.alpha = v * 0.92f;
 		UI.card(x, y, w, 16, 8, UI.theme.panel(), UI.theme.border());

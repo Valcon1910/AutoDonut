@@ -101,6 +101,11 @@ public class AutoDonutConfig {
 		inventoryItems = d.inventoryItems;
 	}
 
+	/** Whether at least one item is fully set up (item + price). */
+	public boolean hasAuctionItems() {
+		return rules.stream().anyMatch(AuctionRule::isComplete);
+	}
+
 	/** Master switch: turning Auto Auction on or off does the same to every item. */
 	public void setAutoAuction(boolean on) {
 		autoAuctionEnabled = on;

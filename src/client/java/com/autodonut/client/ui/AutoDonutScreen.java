@@ -244,7 +244,7 @@ public class AutoDonutScreen extends Screen {
 								auction::status, () -> cfg.autoAuctionEnabled, v -> {
 									cfg.setAutoAuction(v);
 									AutoDonutConfig.save();
-								}, () -> setPage(Page.AUCTION)).locked(this::runLocked),
+								}, () -> setPage(Page.AUCTION)).locked(() -> runLocked() || !cfg.hasAuctionItems(), () -> runLocked() ? "Offline" : "No items"),
 						new FeatureCard(new ItemStack(Items.GOLD_INGOT), "Quick Sell", "Press its key on a held or hovered item to set a price and sell it",
 								() -> "Key: " + AutoDonutClient.quickSellKeyName(), () -> cfg.quickSellEnabled, v -> {
 									cfg.quickSellEnabled = v;
@@ -255,7 +255,7 @@ public class AutoDonutScreen extends Screen {
 									cfg.showHud = v;
 									AutoDonutConfig.save();
 								}, null).locked(this::runLocked),
-						new FeatureCard(new ItemStack(Items.ENDER_EYE), "Streamer Mode", "Hides the status label and AutoDonut chat messages",
+						new FeatureCard(new ItemStack(Items.ENDER_EYE), "Streamer Mode", "Hides AutoDonut from replay mods and recordings: status label, chat messages and sounds",
 								() -> Compat.hasRecorder() ? "Recording mod found" : "", () -> Compat.streamerMode(), v -> {
 									cfg.streamerMode = v;
 									AutoDonutConfig.save();
@@ -281,10 +281,10 @@ public class AutoDonutScreen extends Screen {
 				}
 			}
 			case AUCTION -> {
-				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoAuctionEnabled && !runLocked(), v -> {
+				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoAuctionEnabled && !runLocked() && cfg.hasAuctionItems(), v -> {
 					cfg.setAutoAuction(v);
 					AutoDonutConfig.save();
-				}).disabled(this::runLocked);
+				}).disabled(() -> runLocked() || !cfg.hasAuctionItems());
 				master.bounds(x + w - ToggleSwitch.WIDTH - 8, top + 8, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT);
 				widgets.add(master);
 

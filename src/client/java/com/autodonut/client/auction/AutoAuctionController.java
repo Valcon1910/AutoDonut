@@ -83,6 +83,8 @@ public final class AutoAuctionController {
 	/** Confirmation menu currently being handled; hidden from view when confirming in the background. */
 	private Screen confirmScreen;
 	private long combatUntil;
+	/** Nothing is listed right after joining, while the server is still sending menus and messages. */
+	private long warmupUntil;
 	/** One-off rule for a Quick Sell listing (not saved in the config). */
 	private AuctionRule quickRule;
 	/** Set when the server reports the listing ("You listed ..."). */
@@ -164,6 +166,11 @@ public final class AutoAuctionController {
 		slot = -1;
 	}
 
+	/** Called when a world is joined. */
+	public void onJoin() {
+		warmupUntil = System.currentTimeMillis() + 10_000;
+	}
+
 	public void onDisconnect() {
 		reset();
 		combatUntil = 0;
@@ -190,6 +197,15 @@ public final class AutoAuctionController {
 		}
 		if (com.autodonut.client.ui.BootOverlay.booting()) {
 			status = "Booting up";
+			return;
+		}
+		if (quickRule == null && now < warmupUntil) {
+			status = "Starting up";
+			return;
+		}
+		if (quickRule == null && cfg.rules.stream().noneMatch(AuctionRule::isComplete)) {
+			reset();
+			status = "No items set up";
 			return;
 		}
 		if (!cfg.autoAuctionEnabled && quickRule == null) {
@@ -520,7 +536,7 @@ public final class AutoAuctionController {
 
 	private void tickAwaitConfirm(Minecraft mc, long now) {
 		Screen screen = mc.gui.screen();
-		if (screen != null && !(screen instanceof AutoDonutScreen) && !(screen instanceof ChatScreen)) {
+		if (screen != null && !(screen instanceof AutoDonutScreen) && !(screen instanceof ChatScreen) && looksLikeSellPrompt(screen)) {
 			confirmScreen = screen;
 			phase = Phase.CONFIRMING;
 			// A human needs a moment to find the button.
@@ -531,6 +547,30 @@ public final class AutoAuctionController {
 			phase = Phase.RESTORE;
 			phaseUntil = now + humanizer.between(300, 900);
 		}
+	}
+
+	/**
+	 * Only screens that are about selling count as the confirm prompt; anything else that
+	 * happens to open (resource pack prompts, server welcome dialogs, ...) is left alone.
+	 */
+	private static boolean looksLikeSellPrompt(Screen screen) {
+		String title = screen.getTitle().getString().toLowerCase(Locale.ROOT);
+		for (String w : new String[]{"sell", "sure", "confirm", "auction", "listing", "price"}) {
+			if (title.contains(w)) return true;
+		}
+		if (screen instanceof AbstractContainerScreen<?> container) {
+			return findConfirmSlot(container.getMenu()) >= 0;
+		}
+		List<Button> buttons = new ArrayList<>();
+		collectButtons(screen.children(), buttons);
+		boolean yes = false;
+		boolean no = false;
+		for (Button b : buttons) {
+			String t = b.getMessage().getString().trim().toLowerCase(Locale.ROOT);
+			if (t.equals("yes") || t.contains("confirm")) yes = true;
+			if (t.equals("no") || t.contains("cancel")) no = true;
+		}
+		return yes && no;
 	}
 
 	private void tickConfirming(Minecraft mc, LocalPlayer player, long now) {
