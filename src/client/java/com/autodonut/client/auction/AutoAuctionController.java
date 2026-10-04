@@ -64,6 +64,14 @@ public final class AutoAuctionController {
 	private final Map<AuctionRule, Long> rulePausedUntil = new IdentityHashMap<>();
 
 	private Phase phase = Phase.IDLE;
+	/** When the current step started; a step running longer than {@link #STEP_TIMEOUT_MS} is abandoned. */
+	private long phaseStartedAt;
+	private static final long STEP_TIMEOUT_MS = 15_000;
+
+	private void setPhase(Phase next) {
+		phase = next;
+		phaseStartedAt = System.currentTimeMillis();
+	}
 	private long phaseUntil;
 	private long nextAllowedAt;
 	private long pausedUntil;
@@ -125,6 +133,9 @@ public final class AutoAuctionController {
 
 	/** True while this screen is the auction confirm menu being clicked in the background. */
 	public boolean isHidden(Screen screen) {
+		if (phase != Phase.CONFIRMING && phase != Phase.AWAIT_CONFIRM && phase != Phase.HOLDING) return false;
+		// With Auto Auction off nothing is ever hidden, unless the player started a Quick Sell.
+		if (!AutoDonutConfig.get().autoAuctionEnabled && quickRule == null) return false;
 		return screen != null && screen == confirmScreen && AutoDonutConfig.get().confirmInBackground;
 	}
 
@@ -150,7 +161,7 @@ public final class AutoAuctionController {
 		rule = r;
 		slot = inventorySlot;
 		// REACTING moves a main-inventory stack into a free hotbar slot first if needed.
-		phase = Phase.REACTING;
+		setPhase(Phase.REACTING);
 		phaseUntil = System.currentTimeMillis();
 		status = "Quick selling";
 	}
@@ -161,7 +172,7 @@ public final class AutoAuctionController {
 		quickRule = null;
 		splitClicks.clear();
 		splitTarget = -1;
-		phase = Phase.IDLE;
+		setPhase(Phase.IDLE);
 		rule = null;
 		slot = -1;
 	}
@@ -188,6 +199,14 @@ public final class AutoAuctionController {
 		if (player == null || mc.gameMode == null) {
 			reset();
 			status = "Not in a world";
+			return;
+		}
+		if (phase != Phase.IDLE && now - phaseStartedAt > STEP_TIMEOUT_MS) {
+			// Watchdog: a step that never finished (no prompt, no server answer) is dropped so
+			// Auto Auction can never stay stuck; hand and slot are put back by reset().
+			reset();
+			nextAllowedAt = now + humanizer.between(2000, 5000);
+			status = "Retrying shortly";
 			return;
 		}
 		if (Lockdown.active()) {
@@ -287,7 +306,7 @@ public final class AutoAuctionController {
 			if (match != null) {
 				rule = match;
 				slot = i;
-				phase = Phase.REACTING;
+				setPhase(Phase.REACTING);
 				phaseUntil = now + Math.round(humanizer.reaction(cfg.maxReactionSeconds) * cfg.speedFactor());
 				status = "Found " + stack.getHoverName().getString();
 				return;
@@ -395,7 +414,7 @@ public final class AutoAuctionController {
 			for (int i = 0; i < amount; i++) splitClicks.add(new int[]{dst, 1});
 			splitClicks.add(new int[]{src, 0});
 		}
-		phase = Phase.SPLITTING;
+		setPhase(Phase.SPLITTING);
 		phaseUntil = now + Math.round(humanizer.reaction(AutoDonutConfig.get().maxReactionSeconds) * AutoDonutConfig.get().speedFactor());
 	}
 
@@ -425,7 +444,7 @@ public final class AutoAuctionController {
 		}
 		slot = splitTarget;
 		splitTarget = -1;
-		phase = Phase.REACTING;
+		setPhase(Phase.REACTING);
 		phaseUntil = now + Math.round(humanizer.handling() * AutoDonutConfig.get().speedFactor());
 	}
 
@@ -450,7 +469,7 @@ public final class AutoAuctionController {
 			phaseUntil = now + Math.round(humanizer.handling() * AutoDonutConfig.get().speedFactor());
 			return;
 		}
-		phase = Phase.PRE_SEND;
+		setPhase(Phase.PRE_SEND);
 		phaseUntil = now + Math.round(humanizer.handling() * AutoDonutConfig.get().speedFactor());
 		status = "Preparing listing";
 	}
@@ -524,11 +543,11 @@ public final class AutoAuctionController {
 		if (cfg.autoConfirm) {
 			// Keep the item held: Donut runs commands a moment after receiving them, so putting it
 			// back now would make it see an empty hand. It's restored once Donut has answered.
-			phase = Phase.AWAIT_CONFIRM;
+			setPhase(Phase.AWAIT_CONFIRM);
 			phaseUntil = now + CONFIRM_WAIT_MS;
 			status = "Waiting for confirmation";
 		} else {
-			phase = Phase.RESTORE;
+			setPhase(Phase.RESTORE);
 			phaseUntil = now + humanizer.between(700, 1600);
 			status = "Listed, waiting";
 		}
@@ -538,13 +557,13 @@ public final class AutoAuctionController {
 		Screen screen = mc.gui.screen();
 		if (screen != null && !(screen instanceof AutoDonutScreen) && !(screen instanceof ChatScreen) && looksLikeSellPrompt(screen)) {
 			confirmScreen = screen;
-			phase = Phase.CONFIRMING;
+			setPhase(Phase.CONFIRMING);
 			// A human needs a moment to find the button.
 			phaseUntil = now + Math.round(humanizer.between(300, 850) * AutoDonutConfig.get().speedFactor());
 			status = "Confirming listing";
 		} else if (now > phaseUntil) {
 			// No confirmation menu appeared; the listing went through directly.
-			phase = Phase.RESTORE;
+			setPhase(Phase.RESTORE);
 			phaseUntil = now + humanizer.between(300, 900);
 		}
 	}
@@ -579,7 +598,7 @@ public final class AutoAuctionController {
 		if (open == null || open != confirmScreen) {
 			// The menu closed by itself.
 			confirmScreen = null;
-			phase = Phase.RESTORE;
+			setPhase(Phase.RESTORE);
 			phaseUntil = now + humanizer.between(300, 900);
 			return;
 		}
@@ -606,10 +625,10 @@ public final class AutoAuctionController {
 		}
 		if (confirmed && handMode != 0) {
 			// Keep it held (server-side) until Donut reports the listing, then put everything back.
-			phase = Phase.HOLDING;
+			setPhase(Phase.HOLDING);
 			holdUntil = now + 1500;
 		} else {
-			phase = Phase.RESTORE;
+			setPhase(Phase.RESTORE);
 			phaseUntil = now + humanizer.between(700, 1400);
 		}
 	}
@@ -617,7 +636,7 @@ public final class AutoAuctionController {
 	private void tickHolding(long now) {
 		if (!serverConfirmed && now < holdUntil) return;
 		restoreHand();
-		phase = Phase.RESTORE;
+		setPhase(Phase.RESTORE);
 		phaseUntil = now + humanizer.between(300, 700);
 	}
 
