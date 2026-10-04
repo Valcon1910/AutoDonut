@@ -85,6 +85,22 @@ public class AutoDonutConfig {
 		return FabricLoader.getInstance().getConfigDir().resolve("autodonut.json");
 	}
 
+	/** Puts every Safety setting back to its default value. */
+	public void resetSafety() {
+		AutoDonutConfig d = new AutoDonutConfig();
+		minDelaySeconds = d.minDelaySeconds;
+		maxDelaySeconds = d.maxDelaySeconds;
+		maxReactionSeconds = d.maxReactionSeconds;
+		maxListingsPerHour = d.maxListingsPerHour;
+		randomBreaks = d.randomBreaks;
+		pauseInMenus = d.pauseInMenus;
+		showHud = d.showHud;
+		autoConfirm = d.autoConfirm;
+		confirmInBackground = d.confirmInBackground;
+		detectionSpeed = d.detectionSpeed;
+		inventoryItems = d.inventoryItems;
+	}
+
 	/** Master switch: turning Auto Auction on or off does the same to every item. */
 	public void setAutoAuction(boolean on) {
 		autoAuctionEnabled = on;

@@ -76,8 +76,9 @@ public class FeatureCard extends Widget {
 		int textW = w - 32 - ToggleSwitch.WIDTH - 14;
 		ui.text(ui.trim(title, textW), x + 32, y + 11, Anim.lerpColor(ui.theme.text(), ui.theme.accent(), k));
 		java.util.List<String> lines = ui.wrap(description, w - 16);
-		for (int i = 0; i < Math.min(2, lines.size()); i++) {
-			ui.text(lines.get(i), x + 8, y + 31 + i * 10, ui.theme.textMuted());
+		int maxLines = Math.max(1, Math.min(2, (h - 19 - 26) / 10));
+		for (int i = 0; i < Math.min(maxLines, lines.size()); i++) {
+			ui.text(lines.get(i), x + 8, y + 27 + i * 10, ui.theme.textMuted());
 		}
 
 		String tag = locked.getAsBoolean() ? "Offline" : k > 0.5f ? "On" : "Off";

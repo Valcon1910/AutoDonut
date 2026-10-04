@@ -48,20 +48,42 @@ public class ToggleSwitch extends Widget {
 	 */
 	public static void paint(Ui ui, int x, int y, float on, float hover) {
 		int w = WIDTH, h = HEIGHT;
-		int offTrack = Anim.lerpColor(ui.theme.track(), ui.theme.textMuted(), hover * 0.25f);
+		int offTrack = Anim.lerpColor(ui.theme.track(), ui.theme.textMuted(), hover * 0.2f);
 		int onTrack = Anim.lerpColor(ui.theme.accent(), ui.theme.accentHover(), hover);
 		int track = Anim.lerpColor(offTrack, onTrack, on);
-		ui.round(x, y, w, h, 3, track);
 
+		// Soft glow while hovered
+		if (hover > 0.01f) {
+			ui.round(x - 1, y - 1, w + 2, h + 2, (h + 2) / 2, (track & 0x00FFFFFF) | (Math.round(hover * 0x40) << 24));
+		}
+		// Pill track: darker rim, body, lighter top half for a slight curve
+		ui.round(x, y, w, h, h / 2, Anim.lerpColor(track, 0xFF000000, 0.25f));
+		ui.round(x + 1, y + 1, w - 2, h - 2, h / 2 - 1, track);
+		ui.round(x + 2, y + 2, w - 4, (h - 4) / 2, 2, Anim.lerpColor(track, 0xFFFFFFFF, 0.10f));
+
+		// State glyphs inside the track: a check on the left when on, a small ring on the right when off
+		int glyphOn = (0x00FFFFFF & ui.theme.onAccent()) | (Math.round(on * 0xE0) << 24);
+		int gx = x + 5, gy = y + h / 2;
+		ui.fill(gx, gy, gx + 1, gy + 1, glyphOn);
+		ui.fill(gx + 1, gy + 1, gx + 2, gy + 2, glyphOn);
+		ui.fill(gx + 2, gy, gx + 3, gy + 1, glyphOn);
+		ui.fill(gx + 3, gy - 1, gx + 4, gy, glyphOn);
+		ui.fill(gx + 4, gy - 2, gx + 5, gy - 1, glyphOn);
+		int glyphOff = (0x00FFFFFF & ui.theme.textMuted()) | (Math.round((1 - on) * 0xC0) << 24);
+		int ox = x + w - 8, oy = y + h / 2 - 2;
+		ui.fill(ox + 1, oy, ox + 3, oy + 1, glyphOff);
+		ui.fill(ox + 1, oy + 3, ox + 3, oy + 4, glyphOff);
+		ui.fill(ox, oy + 1, ox + 1, oy + 3, glyphOff);
+		ui.fill(ox + 3, oy + 1, ox + 4, oy + 3, glyphOff);
+
+		// Knob: rounded, with a drop shadow and a light top edge
 		int k = h - 4;
 		int kx = x + 2 + Math.round(on * (w - 4 - k));
 		int ky = y + 2;
-		ui.round(kx, ky + 1, k, k, 2, 0x40000000);
-		ui.round(kx, ky, k, k, 2, Anim.lerpColor(Anim.lerpColor(ui.theme.knob(), ui.theme.textMuted(), 0.15f), ui.theme.knob(), on));
-		// Two grip lines on the knob
-		int grip = Anim.lerpColor(ui.theme.track(), ui.theme.accent(), on);
-		ui.fill(kx + k / 2 - 2, ky + 3, kx + k / 2 - 1, ky + k - 3, grip);
-		ui.fill(kx + k / 2 + 1, ky + 3, kx + k / 2 + 2, ky + k - 3, grip);
+		ui.round(kx, ky + 1, k, k, k / 2, 0x50000000);
+		ui.round(kx, ky, k, k, k / 2, ui.theme.knob());
+		ui.fill(kx + 3, ky + 1, kx + k - 3, ky + 2, 0xFFFFFFFF);
+		ui.fill(kx + 2, ky + k - 2, kx + k - 2, ky + k - 1, Anim.lerpColor(ui.theme.knob(), 0xFF000000, 0.12f));
 	}
 
 	@Override

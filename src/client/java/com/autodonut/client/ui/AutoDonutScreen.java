@@ -258,18 +258,21 @@ public class AutoDonutScreen extends Screen {
 				);
 				int introH = introHeight(w);
 				int cardsTop = top + introH + 22;
-				int cols = w >= 380 ? 3 : w >= 240 ? 2 : 1;
+				// Rows: Auto Auction (full width), Streamer Mode (full width), then Quick Sell + HUD Status.
+				// cards = [Auto Auction, Quick Sell, HUD Status, Streamer Mode]
+				List<List<FeatureCard>> layout = List.of(
+						List.of(cards.get(0)),
+						List.of(cards.get(3)),
+						List.of(cards.get(1), cards.get(2)));
 				int gap = 8;
-				int cw = (w - gap * (cols - 1)) / cols;
-				int rows = (cards.size() + cols - 1) / cols;
-				int ch = Math.min(72, (py + ph - 8 - cardsTop - gap * (rows - 1)) / rows);
-				for (int i = 0; i < cards.size(); i++) {
-					int col = i % cols;
-					// The last card stretches over the rest of its row (Streamer Mode gets room to read).
-					int span = i == cards.size() - 1 ? Math.max(1, Math.min(2, cols - col)) : 1;
-					int cardW = cw * span + gap * (span - 1);
-					cards.get(i).bounds(x + col * (cw + gap), cardsTop + (i / cols) * (ch + gap), cardW, ch);
-					widgets.add(cards.get(i));
+				int ch = Math.max(46, Math.min(72, (py + ph - 8 - cardsTop - gap * (layout.size() - 1)) / layout.size()));
+				for (int r = 0; r < layout.size(); r++) {
+					List<FeatureCard> row = layout.get(r);
+					int cw = (w - gap * (row.size() - 1)) / row.size();
+					for (int c = 0; c < row.size(); c++) {
+						row.get(c).bounds(x + c * (cw + gap), cardsTop + r * (ch + gap), cw, ch);
+						widgets.add(row.get(c));
+					}
 				}
 			}
 			case AUCTION -> {
@@ -288,6 +291,11 @@ public class AutoDonutScreen extends Screen {
 				widgets.add(grid);
 			}
 			case SAFETY -> {
+				widgets.add(new UiButton("Reset to defaults", UiButton.Style.SECONDARY, () -> {
+					cfg.resetSafety();
+					AutoDonutConfig.save();
+					rebuildPending = true;
+				}).bounds(x + w - 104, py + TOP + 10, 104, 18));
 				List<SettingRow> rows = List.of(
 						new SettingRow("Minimum delay", "Shortest wait between listings",
 								new Slider(1, 120, () -> cfg.minDelaySeconds, v -> {

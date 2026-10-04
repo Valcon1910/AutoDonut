@@ -115,7 +115,7 @@ public class RuleGrid extends Widget {
 	private void drawRule(Ui ui, AuctionRule rule, int cx, int cy, int cw, float hv) {
 		ItemIndex.Entry entry = rule.hasItems() ? ItemIndex.entryFor(rule.items.get(0)) : null;
 		boolean ready = rule.isComplete();
-		boolean live = ready && rule.enabled;
+		boolean live = ready && rule.enabled && !locked.getAsBoolean();
 
 		int bg = Anim.lerpColor(ui.theme.surface(), ui.theme.surfaceHover(), hv);
 		ui.round(cx, cy, cw, CARD_H, 3, bg);
@@ -125,8 +125,9 @@ public class RuleGrid extends Widget {
 		ui.item(stack, cx + 6, cy + 5);
 
 		String name = entry == null ? "No item" : entry.name() + (rule.items.size() > 1 ? " +" + (rule.items.size() - 1) : "");
-		String tag = !ready ? (entry == null ? "Set up" : "Set price") : rule.enabled ? "Active" : "Off";
-		int tagColor = !ready ? ui.theme.danger() : rule.enabled ? ui.theme.success() : ui.theme.textMuted();
+		boolean offline = locked.getAsBoolean();
+		String tag = !ready ? (entry == null ? "Set up" : "Set price") : offline ? "Offline" : rule.enabled ? "Active" : "Off";
+		int tagColor = !ready ? ui.theme.danger() : !offline && rule.enabled ? ui.theme.success() : ui.theme.textMuted();
 		int tagW = ui.tag(tag, cx + cw - 7, cy + 9, tagColor);
 		ui.text(ui.trim(name, cw - 34 - tagW - 6), cx + 26, cy + 9, ui.theme.text());
 
