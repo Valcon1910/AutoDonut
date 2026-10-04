@@ -167,6 +167,21 @@ public final class AutoAuctionController {
 		status = "Quick selling";
 	}
 
+	/**
+	 * Timers keep running, but nothing is done: when the next action becomes due it waits
+	 * ("queued") until the reason is gone. The step watchdog is held back meanwhile.
+	 */
+	private void queue(String until, long now, long sinceLastTick) {
+		phaseStartedAt += sinceLastTick;
+		if (phase == Phase.IDLE && now < nextAllowedAt) {
+			status = "Next listing in " + seconds(nextAllowedAt - now) + ", then waits until " + until;
+		} else if (phase != Phase.IDLE && now < phaseUntil) {
+			status = "Working, waits until " + until;
+		} else {
+			status = "Queued until " + until;
+		}
+	}
+
 	public void reset() {
 		restoreHand();
 		confirmScreen = null;
@@ -207,12 +222,7 @@ public final class AutoAuctionController {
 		boolean panelOpen = mc.gui.screen() instanceof AutoDonutScreen;
 		boolean midPrompt = phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.HOLDING;
 		if (panelOpen && cfg.pauseInPanel && quickRule == null && !midPrompt) {
-			// Freeze while the AutoDonut panel is open: every timer is pushed back by the time spent.
-			nextAllowedAt += sinceLastTick;
-			phaseUntil += sinceLastTick;
-			phaseStartedAt += sinceLastTick;
-			pausedUntil = pausedUntil > now ? pausedUntil + sinceLastTick : pausedUntil;
-			status = "Paused while AutoDonut is open";
+			queue("you close AutoDonut", now, sinceLastTick);
 			return;
 		}
 		if (phase != Phase.IDLE && now - phaseStartedAt > STEP_TIMEOUT_MS) {
@@ -252,10 +262,10 @@ public final class AutoAuctionController {
 			return;
 		}
 		if (now < combatUntil) {
-			// Drop whatever was in progress (an open confirm menu becomes visible again);
-			// nothing is touched while in combat.
-			if (phase != Phase.IDLE || confirmScreen != null) reset();
-			status = "Paused, in combat (" + seconds(combatUntil - now) + ")";
+			// A prompt being answered is dropped (it becomes visible again and the hand is put
+			// back); anything else keeps counting down and waits until combat is over.
+			if (phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.HOLDING || confirmScreen != null) reset();
+			queue("combat ends (" + seconds(combatUntil - now) + ")", now, sinceLastTick);
 			return;
 		}
 		if (now < pausedUntil) {
