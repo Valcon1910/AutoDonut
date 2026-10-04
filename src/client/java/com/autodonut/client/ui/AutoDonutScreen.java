@@ -391,21 +391,27 @@ public class AutoDonutScreen extends Screen {
 		}).searchIcon();
 		searchField.bounds(x, top + 9, w, 18);
 		widgets.add(searchField);
+		editorMoving.clear();
+		editorMoving.put(searchField, top + 9);
 
 		int half = (w - 6) / 2;
 		TextField price = new TextField("e.g. 1.5k or 250000", rule.priceText, 16, PriceFormat::isPriceChar, t -> rule.priceText = t).prefix("$ ");
 		price.bounds(x, top + 62, half, 18);
 		widgets.add(price);
+		editorMoving.put(price, top + 62);
 
 		QuantityMode[] modes = QuantityMode.values();
 		String[] labels = new String[modes.length];
 		for (int i = 0; i < modes.length; i++) labels[i] = modes[i].label();
-		widgets.add(new Segmented(labels, () -> rule.mode.ordinal(), i -> {
+		Segmented quantity = new Segmented(labels, () -> rule.mode.ordinal(), i -> {
 			if (rule.mode != modes[i]) {
 				rule.mode = modes[i];
 				rebuildPending = true;
 			}
-		}).bounds(x + half + 6, top + 62, w - half - 6, 18));
+		});
+		quantity.bounds(x + half + 6, top + 62, w - half - 6, 18);
+		widgets.add(quantity);
+		editorMoving.put(quantity, top + 62);
 
 		if (rule.mode == QuantityMode.EXACTLY) {
 			TextField amount = new TextField("1 to 64", Integer.toString(rule.amount), 2, Character::isDigit, t -> {
@@ -414,12 +420,16 @@ public class AutoDonutScreen extends Screen {
 			}).prefix("Amount  ");
 			amount.bounds(x, top + 88, w, 18);
 			widgets.add(amount);
+			editorMoving.put(amount, top + 88);
 		} else {
-			widgets.add(new RangeSlider(1, 64, () -> rule.min, v -> rule.min = v, () -> rule.max, v -> rule.max = v)
-					.bounds(x, top + 86, w, 26));
+			RangeSlider range = new RangeSlider(1, 64, () -> rule.min, v -> rule.min = v, () -> rule.max, v -> rule.max = v);
+			range.bounds(x, top + 86, w, 26);
+			widgets.add(range);
+			editorMoving.put(range, top + 86);
 		}
 
 		int by = Math.max(top + 156, py + ph - 26);
+		editorButtonsY = by;
 		int doneW = 60;
 		widgets.add(new UiButton("Done", UiButton.Style.PRIMARY, this::finishEditing).bounds(x + w - doneW, by, doneW, 18));
 		widgets.add(new UiButton("Delete", UiButton.Style.DANGER, () -> {
@@ -503,6 +513,9 @@ public class AutoDonutScreen extends Screen {
 
 	private void editRule(AuctionRule rule) {
 		editing = rule;
+		editorScroll.snap(0);
+		editorScrollTarget = 0;
+		chipsExtra.snap((chipLines(rule, contentX(), contentW()) - 1) * CHIP_LINE);
 		customRow.snap(rule.mode == QuantityMode.CUSTOM ? 1 : 0);
 		setPage(Page.EDIT);
 	}
@@ -601,7 +614,13 @@ public class AutoDonutScreen extends Screen {
 		ui.alpha = openProgress * pe;
 		graphics.pose().pushMatrix();
 		graphics.pose().translate((1f - pe) * 10f, 0);
+		boolean editorClip = page == Page.EDIT && editing != null;
+		if (editorClip) {
+			layoutEditor();
+			ui.scissor(contentX() - 2, bodyTop() - 2, contentX() + contentW() + 2, editorButtonsY - 4);
+		}
 		drawPageDecor();
+		if (editorClip) ui.endScissor();
 		float pageAlpha = ui.alpha;
 		boolean safetyClip = page == Page.SAFETY && safetyMaxScroll() > 0;
 		if (page == Page.SAFETY) {
@@ -611,6 +630,12 @@ public class AutoDonutScreen extends Screen {
 		}
 		if (safetyClip) ui.scissor(contentX(), bodyTop(), contentX() + contentW(), py + ph - 8);
 		for (Widget widget : widgets) {
+			if (editorClip && editorMoving.containsKey(widget)) {
+				ui.scissor(contentX() - 2, bodyTop() - 2, contentX() + contentW() + 2, editorButtonsY - 4);
+				widget.render(ui, mouseX, mouseY);
+				ui.endScissor();
+				continue;
+			}
 			if (widget instanceof RangeSlider) {
 				ui.alpha = pageAlpha * Anim.easeInOut(customRow.get());
 				graphics.pose().pushMatrix();
@@ -633,6 +658,13 @@ public class AutoDonutScreen extends Screen {
 			}
 		}
 		if (revealAt >= 0 && System.currentTimeMillis() - revealAt > 1500) revealAt = -1;
+		if (editorClip && editorMaxScroll() > 0) {
+			int track = editorButtonsY - 4 - bodyTop();
+			int content = track + editorMaxScroll();
+			int barH = Math.max(16, track * track / content);
+			int barY = bodyTop() + Math.round((track - barH) * (editScroll / (float) editorMaxScroll()));
+			ui.fill(contentX() + contentW() + 3, barY, contentX() + contentW() + 5, barY + barH, ui.theme.track());
+		}
 		if (safetyClip) {
 			ui.endScissor();
 			int track = py + ph - 8 - bodyTop();
@@ -804,16 +836,16 @@ public class AutoDonutScreen extends Screen {
 			case EDIT -> {
 				AuctionRule rule = editing;
 				if (rule == null) return;
-				ui.text("Item", x, top, t.textMuted());
-				ui.text("Items", x, top, t.textMuted());
-				drawChips(rule, x, top + 30, w);
-				ui.text("Price", x, top + 53, t.textMuted());
-				ui.text("Quantity", x + (w - 6) / 2 + 6, top + 53, t.textMuted());
+				int s0 = -editScroll;
+				ui.text("Items", x, top + s0, t.textMuted());
+				drawChips(rule, x, top + 30 + s0, w);
+				ui.text("Price", x, top + 53 + editExtra + s0, t.textMuted());
+				ui.text("Quantity", x + (w - 6) / 2 + 6, top + 53 + editExtra + s0, t.textMuted());
 
 				ItemIndex.Entry entry = rule.hasItems() ? ItemIndex.entryFor(rule.items.get(0)) : null;
 				customRow.set(rule.mode == QuantityMode.CUSTOM ? 1 : 0);
 				float cr = Anim.easeInOut(customRow.update(ui.dt));
-				drawPreview(rule, entry, x, top + 114 + Math.round(cr * 8), w);
+				drawPreview(rule, entry, x, top + 114 + Math.round(cr * 8) + editExtra - editScroll, w);
 			}
 			case APPEARANCE -> {
 				if (appearanceLabels.length == 2) {
@@ -894,6 +926,63 @@ public class AutoDonutScreen extends Screen {
 		return offlineReason() != null;
 	}
 
+	/** Editor widgets that move with the chip list and scrolling, with their unshifted y. */
+	private final java.util.LinkedHashMap<Widget, Integer> editorMoving = new java.util.LinkedHashMap<>();
+	private int editorButtonsY;
+	/** Extra height of the chip list beyond one line (animated) and the editor scroll offset. */
+	private final Anim chipsExtra = new Anim(0, 12);
+	private final Anim editorScroll = new Anim(0, 18);
+	private float editorScrollTarget;
+	private int editExtra;
+	private int editScroll;
+	private static final int CHIP_LINE = 18;
+
+	/** Number of lines the chips wrap onto at this width. */
+	private int chipLines(AuctionRule rule, int x, int w) {
+		if (!rule.hasItems()) return 1;
+		int cx = x;
+		int lines = 1;
+		for (String item : rule.items) {
+			int cw = chipWidth(item);
+			if (cx + cw > x + w && cx > x) {
+				lines++;
+				cx = x;
+			}
+			cx += cw + 4;
+		}
+		return lines;
+	}
+
+	private int chipWidth(String item) {
+		ItemIndex.Entry e = ItemIndex.entryFor(item);
+		String name = e == null ? item : e.name();
+		return 14 + Math.min(90, ui.width(name)) + 14;
+	}
+
+	private int editorMaxScroll() {
+		int contentBottom = bodyTop() + 148 + editExtra;
+		return Math.max(0, contentBottom - (editorButtonsY - 6));
+	}
+
+	/** Moves editor widgets for the current chip height and scroll; called every frame on the editor. */
+	private void layoutEditor() {
+		if (editing == null) return;
+		int top = bodyTop();
+		int lines = chipLines(editing, contentX(), contentW());
+		chipsExtra.set((lines - 1) * CHIP_LINE);
+		editExtra = Math.round(chipsExtra.update(ui.dt));
+		editorScrollTarget = Math.max(0, Math.min(editorMaxScroll(), editorScrollTarget));
+		editorScroll.set(editorScrollTarget);
+		editScroll = Math.round(editorScroll.update(ui.dt));
+		for (var e : editorMoving.entrySet()) {
+			Widget wd = e.getKey();
+			int base = e.getValue();
+			int y = base + (base > top + 40 ? editExtra : 0) - editScroll;
+			wd.bounds(wd.x, y, wd.w, wd.h);
+			wd.visible = y + wd.h > top - 2 && y < editorButtonsY - 4;
+		}
+	}
+
 	/** Clickable remove buttons of the item chips drawn this frame: {x, y, w, h, index}. */
 	private final List<int[]> chipHits = new ArrayList<>();
 
@@ -906,15 +995,17 @@ public class AutoDonutScreen extends Screen {
 			return;
 		}
 		int cx = x;
+		int baseY = y;
 		for (int i = 0; i < rule.items.size(); i++) {
 			ItemIndex.Entry e = ItemIndex.entryFor(rule.items.get(i));
 			String name = e == null ? rule.items.get(i) : e.name();
-			int cw = 14 + Math.min(90, ui.width(name)) + 14;
-			int remaining = rule.items.size() - i;
-			if (cx + cw > x + w - (remaining > 1 ? 50 : 0)) {
-				ui.text("+" + remaining + " more", cx + 2, y + 3, t.textMuted());
-				break;
+			int cw = chipWidth(rule.items.get(i));
+			if (cx + cw > x + w && cx > x) {
+				// Wrap onto the next line; new lines slide in as the area grows.
+				cx = x;
+				y += CHIP_LINE;
 			}
+			if (y + 14 > baseY + CHIP_LINE + editExtra) break;
 			boolean over = lastMouseX >= cx && lastMouseX < cx + cw && lastMouseY >= y && lastMouseY < y + 14;
 			ui.round(cx, y, cw, 14, 3, over ? t.surfaceHover() : t.surface());
 			ui.outline(cx, y, cw, 14, 1, rule.items.get(i).startsWith("#") ? t.accent() : t.border());
@@ -1211,6 +1302,10 @@ public class AutoDonutScreen extends Screen {
 		if (resultsVisible()) {
 			int max = Math.max(0, results.size() - MAX_RESULTS_SHOWN);
 			resultScroll = Math.max(0, Math.min(max, resultScroll - (int) Math.signum(scrollY)));
+			return true;
+		}
+		if (page == Page.EDIT && editorMaxScroll() > 0 && my >= bodyTop() && my < editorButtonsY) {
+			editorScrollTarget = Math.max(0, Math.min(editorMaxScroll(), editorScrollTarget - (float) scrollY * 22));
 			return true;
 		}
 		if (page == Page.SAFETY && safetyMaxScroll() > 0 && my >= bodyTop() && my < py + ph - 8) {
