@@ -302,12 +302,12 @@ public class AutoDonutScreen extends Screen {
 					rebuildPending = true;
 				}).bounds(x + w - 104, py + TOP + 10, 104, 18));
 				List<SettingRow> rows = List.of(
-						new SettingRow("Minimum delay", "Shortest wait between listings",
+						new SettingRow("Minimum delay", "",
 								new Slider(1, 120, () -> cfg.minDelaySeconds, v -> {
 									cfg.minDelaySeconds = v;
 									if (cfg.maxDelaySeconds < v) cfg.maxDelaySeconds = v;
 								}, v -> v + "s"), 110).warning(this::minDelayWarning),
-						new SettingRow("Maximum delay", "Longest wait between listings",
+						new SettingRow("Maximum delay", "",
 								new Slider(5, 300, () -> cfg.maxDelaySeconds, v -> {
 									cfg.maxDelaySeconds = v;
 									if (cfg.minDelaySeconds > v) cfg.minDelaySeconds = Math.max(1, v);
@@ -326,7 +326,7 @@ public class AutoDonutScreen extends Screen {
 								new Slider(1, 60, () -> cfg.maxListingsPerHour, v -> cfg.maxListingsPerHour = v, v -> Integer.toString(v)), 110),
 						new SettingRow("Random breaks", "Sometimes pause for a few minutes",
 								toggle(() -> cfg.randomBreaks, v -> cfg.randomBreaks = v), ToggleSwitch.WIDTH),
-						new SettingRow("Inventory items", "Items outside the hotbar; your hand never changes",
+						new SettingRow("Inventory items", "",
 								new Segmented(new String[]{"Move to hotbar", "Hotbar only"}, () -> cfg.inventoryItems, i -> {
 									cfg.inventoryItems = i;
 									AutoDonutConfig.save();
@@ -842,7 +842,7 @@ public class AutoDonutScreen extends Screen {
 				ui.fill(x, top, x + 2, top + ih, offline != null ? t.danger() : t.accent());
 				List<String> lines = ui.wrap(introText(), w - 20);
 				for (int i = 0; i < lines.size(); i++) {
-					ui.text(lines.get(i), x + 10, top + 7 + i * 10, i == 0 ? t.text() : t.textMuted());
+					ui.text(lines.get(i), x + 10, top + 7 + i * 10, offline != null || i == 0 ? t.text() : t.textMuted());
 				}
 				ui.text("Features", x, top + ih + 9, t.textMuted());
 				ui.fill(x + ui.width("Features") + 6, top + ih + 13, x + w, top + ih + 14, t.border());
