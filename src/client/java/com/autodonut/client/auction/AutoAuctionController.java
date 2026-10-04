@@ -110,6 +110,7 @@ public final class AutoAuctionController {
 		} else if (ping > 1200) lagFor(now, 4000, "Lagging hard (ping " + ping + "ms)");
 		else if (rawGap > 1200) lagFor(now, 4000, "Game froze for " + (rawGap / 100) / 10.0 + "s");
 		else if (fps > 0 && fps < 12) lagFor(now, 4000, "Game running slowly (" + fps + " FPS)");
+		if (!com.autodonut.client.ServerProbe.responding()) lagFor(now, 1000, "Server not responding");
 		lagging = now < laggingUntil;
 		if (!lagging) lagReason = "";
 	}

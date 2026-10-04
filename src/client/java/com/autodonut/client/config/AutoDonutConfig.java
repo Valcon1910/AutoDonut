@@ -49,6 +49,8 @@ public class AutoDonutConfig {
 	public boolean pauseInPanel = true;
 	/** The "continue now" key (default Y) skips the remaining wait before the next listing. */
 	public boolean skipKeyEnabled = true;
+	/** Ping the server every 10s (every 4s while it isn't answering) and pause when it doesn't respond. */
+	public boolean serverCheck = true;
 	public boolean streamerMode = false;
 	/** Quick Sell: pressing R opens Donut's own sell screen for the held item. */
 	public boolean quickSellEnabled = true;
@@ -106,6 +108,7 @@ public class AutoDonutConfig {
 		instantBackgroundConfirm = d.instantBackgroundConfirm;
 		pauseInPanel = d.pauseInPanel;
 		skipKeyEnabled = d.skipKeyEnabled;
+		serverCheck = d.serverCheck;
 		detectionSpeed = d.detectionSpeed;
 		inventoryItems = d.inventoryItems;
 	}

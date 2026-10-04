@@ -344,6 +344,8 @@ public class AutoDonutScreen extends Screen {
 								toggle(() -> cfg.autoConfirm, v -> cfg.autoConfirm = v), ToggleSwitch.WIDTH),
 						new SettingRow("Confirm in background", "Don't show the confirm menu while clicking it",
 								toggle(() -> cfg.confirmInBackground, v -> cfg.confirmInBackground = v), ToggleSwitch.WIDTH),
+						new SettingRow("Server check", "Ping the server every 10s; pause and warn if it stops answering",
+								toggle(() -> cfg.serverCheck, v -> cfg.serverCheck = v), ToggleSwitch.WIDTH),
 						new SettingRow("Continue now key", "Press " + AutoDonutClient.skipKeyName() + " to skip the wait before the next listing",
 								toggle(() -> cfg.skipKeyEnabled, v -> cfg.skipKeyEnabled = v), ToggleSwitch.WIDTH),
 						new SettingRow("Instant background confirm", "Answer hidden prompts at once so you're never blocked",

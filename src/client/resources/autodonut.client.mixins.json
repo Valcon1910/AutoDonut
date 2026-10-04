@@ -5,6 +5,7 @@
 	"client": [
 		"ConnectScreenMixin",
 		"ScreenMixin",
+		"ClientPacketListenerMixin",
 		"AbstractContainerScreenAccessor"
 	],
 	"injectors": { "defaultRequire": 1 }

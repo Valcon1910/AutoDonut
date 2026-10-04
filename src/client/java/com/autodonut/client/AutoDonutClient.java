@@ -109,6 +109,7 @@ public class AutoDonutClient implements ClientModInitializer {
 			ServerContext.onJoin(client.getSingleplayerServer() != null);
 			com.autodonut.client.auction.ItemIndex.clearTags();
 			AutoAuctionController.get().onJoin();
+			ServerProbe.reset();
 			BootOverlay.onJoin();
 		});
 	}
@@ -126,6 +127,7 @@ public class AutoDonutClient implements ClientModInitializer {
 			if (client.gui.screen() == null && AutoDonutConfig.get().skipKeyEnabled) AutoAuctionController.get().skipWait();
 		}
 		QuickSell.tick(client);
+		ServerProbe.tick(client);
 		if (client.player == null && !(client.gui.screen() instanceof net.minecraft.client.gui.screens.ConnectScreen)) {
 			ServerContext.onNotInWorld();
 		}
