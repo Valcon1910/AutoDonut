@@ -6,6 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.HashSet;
 
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -46,6 +49,54 @@ public final class ItemIndex {
 			entries = list;
 		}
 		return entries;
+	}
+
+	/** Tag ids ("c:foods") of a stack, as currently sent by the server. */
+	public static Set<String> tagsOf(ItemStack stack) {
+		Set<String> tags = new HashSet<>();
+		stack.getTags().forEach(t -> tags.add(t.location().toString()));
+		return tags;
+	}
+
+	/** All item tags with one example item each; rebuilt when the server's tags change. */
+	private static Map<String, ItemStack> tagExamples;
+
+	public static void clearTags() {
+		tagExamples = null;
+	}
+
+	private static Map<String, ItemStack> tagExamples() {
+		if (tagExamples == null || tagExamples.isEmpty()) {
+			Map<String, ItemStack> map = new TreeMap<>();
+			for (Entry e : entries()) {
+				for (String t : tagsOf(e.stack())) map.putIfAbsent(t, e.stack());
+			}
+			tagExamples = map;
+		}
+		return tagExamples;
+	}
+
+	/** Display entry for a rule entry: an item, or a #tag shown with an example item. */
+	public static Entry entryFor(String entry) {
+		if (!entry.startsWith("#")) return byId(entry);
+		for (var e : tagExamples().entrySet()) {
+			if (com.autodonut.client.config.AuctionRule.entryMatches(entry, "", Set.of(e.getKey()))) {
+				return new Entry(entry, entry, e.getValue());
+			}
+		}
+		return new Entry(entry, entry, ItemStack.EMPTY);
+	}
+
+	/** Tags whose id contains the query (without the leading '#'), shortest first. */
+	public static List<Entry> searchTags(String query, int limit) {
+		String q = query.trim().toLowerCase(Locale.ROOT);
+		if (q.startsWith("#")) q = q.substring(1);
+		List<Entry> out = new ArrayList<>();
+		for (var e : tagExamples().entrySet()) {
+			if (q.isEmpty() || e.getKey().contains(q)) out.add(new Entry("#" + e.getKey(), "#" + e.getKey(), e.getValue()));
+		}
+		out.sort(Comparator.comparingInt((Entry e) -> e.id().length()));
+		return out.size() > limit ? out.subList(0, limit) : out;
 	}
 
 	public static String idOf(Item item) {

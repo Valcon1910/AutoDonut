@@ -274,17 +274,16 @@ public class AutoDonutScreen extends Screen {
 			}
 			case AUCTION -> {
 				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoAuctionEnabled && !runLocked(), v -> {
-					if (runLocked()) return;
 					cfg.setAutoAuction(v);
 					AutoDonutConfig.save();
-				});
+				}).disabled(this::runLocked);
 				master.bounds(x + w - ToggleSwitch.WIDTH - 8, top + 8, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT);
 				widgets.add(master);
 
 				RuleGrid grid = new RuleGrid(cfg.rules, this::editRule, this::addRule, rule -> {
 					cfg.onRuleToggled(rule);
 					AutoDonutConfig.save();
-				});
+				}).locked(this::runLocked);
 				grid.bounds(x, top + 50, w, py + ph - 8 - (top + 50));
 				widgets.add(grid);
 			}
@@ -374,27 +373,16 @@ public class AutoDonutScreen extends Screen {
 	private void buildEditor(int x, int w, int top) {
 		AuctionRule rule = editing;
 		if (rule == null) return;
-		ItemIndex.Entry current = ItemIndex.byId(rule.itemId);
-
-		searchField = new TextField("Search items, e.g. Diamond", current == null ? "" : current.name(), 40, c -> true, text -> {
+		searchField = new TextField("Add items, e.g. Diamond or #foods", "", 40, c -> true, text -> {
 			resultScroll = 0;
-			results = ItemIndex.search(text, 60);
-			// Typing a full item name selects it right away.
-			ItemIndex.Entry exact = ItemIndex.byName(text);
-			if (exact != null && editing != null) {
-				editing.itemId = exact.id();
-				AutoDonutConfig.save();
-			}
-		}).searchIcon().icon(() -> {
-			ItemIndex.Entry e = editing == null ? null : ItemIndex.byId(editing.itemId);
-			return e != null && searchField != null && searchField.text().equalsIgnoreCase(e.name()) ? e.stack() : ItemStack.EMPTY;
-		});
+			results = text.trim().startsWith("#") ? ItemIndex.searchTags(text, 60) : ItemIndex.search(text, 60);
+		}).searchIcon();
 		searchField.bounds(x, top + 9, w, 18);
 		widgets.add(searchField);
 
 		int half = (w - 6) / 2;
 		TextField price = new TextField("e.g. 1.5k or 250000", rule.priceText, 16, PriceFormat::isPriceChar, t -> rule.priceText = t).prefix("$ ");
-		price.bounds(x, top + 42, half, 18);
+		price.bounds(x, top + 62, half, 18);
 		widgets.add(price);
 
 		QuantityMode[] modes = QuantityMode.values();
@@ -405,21 +393,21 @@ public class AutoDonutScreen extends Screen {
 				rule.mode = modes[i];
 				rebuildPending = true;
 			}
-		}).bounds(x + half + 6, top + 42, w - half - 6, 18));
+		}).bounds(x + half + 6, top + 62, w - half - 6, 18));
 
 		if (rule.mode == QuantityMode.EXACTLY) {
 			TextField amount = new TextField("1 to 64", Integer.toString(rule.amount), 2, Character::isDigit, t -> {
 				if (t.isEmpty()) return;
 				rule.amount = Math.max(1, Math.min(64, Integer.parseInt(t)));
 			}).prefix("Amount  ");
-			amount.bounds(x, top + 68, half, 18);
+			amount.bounds(x, top + 88, w, 18);
 			widgets.add(amount);
 		} else {
 			widgets.add(new RangeSlider(1, 64, () -> rule.min, v -> rule.min = v, () -> rule.max, v -> rule.max = v)
-					.bounds(x, top + 66, w, 26));
+					.bounds(x, top + 86, w, 26));
 		}
 
-		int by = Math.max(top + 136, py + ph - 26);
+		int by = Math.max(top + 156, py + ph - 26);
 		int doneW = 60;
 		widgets.add(new UiButton("Done", UiButton.Style.PRIMARY, this::finishEditing).bounds(x + w - doneW, by, doneW, 18));
 		widgets.add(new UiButton("Delete", UiButton.Style.DANGER, () -> {
@@ -513,7 +501,7 @@ public class AutoDonutScreen extends Screen {
 
 	/** Rules left without an item are dropped; everything else is kept and saved. */
 	private void cleanUpEditing() {
-		if (editing != null && editing.itemId.isEmpty()) cfg.rules.remove(editing);
+		if (editing != null && !editing.hasItems()) cfg.rules.remove(editing);
 		editing = null;
 		AutoDonutConfig.save();
 	}
@@ -795,13 +783,15 @@ public class AutoDonutScreen extends Screen {
 				AuctionRule rule = editing;
 				if (rule == null) return;
 				ui.text("Item", x, top, t.textMuted());
-				ui.text("Price", x, top + 33, t.textMuted());
-				ui.text("Quantity", x + (w - 6) / 2 + 6, top + 33, t.textMuted());
+				ui.text("Items", x, top, t.textMuted());
+				drawChips(rule, x, top + 30, w);
+				ui.text("Price", x, top + 53, t.textMuted());
+				ui.text("Quantity", x + (w - 6) / 2 + 6, top + 53, t.textMuted());
 
-				ItemIndex.Entry entry = ItemIndex.byId(rule.itemId);
+				ItemIndex.Entry entry = rule.hasItems() ? ItemIndex.entryFor(rule.items.get(0)) : null;
 				customRow.set(rule.mode == QuantityMode.CUSTOM ? 1 : 0);
 				float cr = Anim.easeInOut(customRow.update(ui.dt));
-				drawPreview(rule, entry, x, top + 94 + Math.round(cr * 8), w);
+				drawPreview(rule, entry, x, top + 114 + Math.round(cr * 8), w);
 			}
 			case APPEARANCE -> {
 				if (appearanceLabels.length == 2) {
@@ -844,6 +834,44 @@ public class AutoDonutScreen extends Screen {
 	/** Running features can't be switched on while offline. */
 	private boolean runLocked() {
 		return offlineReason() != null;
+	}
+
+	/** Clickable remove buttons of the item chips drawn this frame: {x, y, w, h, index}. */
+	private final List<int[]> chipHits = new ArrayList<>();
+
+	/** The rule's items as chips (icon, name, x). Overflow collapses into "+N more". */
+	private void drawChips(AuctionRule rule, int x, int y, int w) {
+		Theme t = ui.theme;
+		chipHits.clear();
+		if (!rule.hasItems()) {
+			ui.text("No items yet: search above, or type # for a tag like #foods", x + 2, y + 3, t.textMuted());
+			return;
+		}
+		int cx = x;
+		for (int i = 0; i < rule.items.size(); i++) {
+			ItemIndex.Entry e = ItemIndex.entryFor(rule.items.get(i));
+			String name = e == null ? rule.items.get(i) : e.name();
+			int cw = 14 + Math.min(90, ui.width(name)) + 14;
+			int remaining = rule.items.size() - i;
+			if (cx + cw > x + w - (remaining > 1 ? 50 : 0)) {
+				ui.text("+" + remaining + " more", cx + 2, y + 3, t.textMuted());
+				break;
+			}
+			boolean over = lastMouseX >= cx && lastMouseX < cx + cw && lastMouseY >= y && lastMouseY < y + 14;
+			ui.round(cx, y, cw, 14, 3, over ? t.surfaceHover() : t.surface());
+			ui.outline(cx, y, cw, 14, 1, rule.items.get(i).startsWith("#") ? t.accent() : t.border());
+			if (e != null && !e.stack().isEmpty()) {
+				ui.g.pose().pushMatrix();
+				ui.g.pose().translate(cx + 2, y + 1);
+				ui.g.pose().scale(0.75f);
+				ui.item(e.stack(), 0, 0);
+				ui.g.pose().popMatrix();
+			}
+			ui.text(ui.trim(name, 90), cx + 15, y + 3, t.text());
+			ui.text("x", cx + cw - 9, y + 3, over ? t.danger() : t.textMuted());
+			chipHits.add(new int[]{cx, y, cw, 14, i});
+			cx += cw + 4;
+		}
 	}
 
 	/** Why AutoDonut is offline, or null when it's running normally. */
@@ -969,6 +997,7 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private void drawPreview(AuctionRule rule, ItemIndex.Entry entry, int x, int y, int w) {
+		String names = entry == null ? "" : entry.name() + (rule.items.size() > 1 ? " and " + (rule.items.size() - 1) + " more" : "");
 		Theme t = ui.theme;
 		ui.card(x, y, w, 26, 6, Anim.lerpColor(t.panel(), t.accent(), 0.08f), Anim.lerpColor(t.border(), t.accent(), 0.35f));
 		String line1;
@@ -978,9 +1007,9 @@ public class AutoDonutScreen extends Screen {
 			line2 = "Then set the price and stack size";
 		} else if (rule.price() <= 0) {
 			line1 = "Enter a price, e.g. 500, 1.5k or 2m";
-			line2 = "Sells " + entry.name() + " stacks of " + rule.quantityText().toLowerCase();
+			line2 = "Sells " + names + " stacks of " + rule.quantityText().toLowerCase();
 		} else {
-			line1 = "Sells " + entry.name() + " stacks of " + rule.quantityText().toLowerCase();
+			line1 = "Sells " + names + " stacks of " + rule.quantityText().toLowerCase();
 			int example = rule.mode == QuantityMode.EXACTLY ? rule.amount : rule.max;
 			line2 = rule.pricePerItem
 					? "A stack of " + example + " lists for $" + PriceFormat.format(rule.totalPrice(example)) + " ($" + PriceFormat.format(rule.price()) + " each)"
@@ -1076,6 +1105,16 @@ public class AutoDonutScreen extends Screen {
 			}
 		}
 
+		if (page == Page.EDIT && editing != null) {
+			for (int[] c : chipHits) {
+				if (mx >= c[0] && mx < c[0] + c[2] && my >= c[1] && my < c[1] + c[3]) {
+					if (c[4] < editing.items.size()) editing.items.remove(c[4]);
+					UiSounds.click();
+					AutoDonutConfig.save();
+					return true;
+				}
+			}
+		}
 		for (Widget w : widgets) w.setFocused(false);
 		for (Widget w : chrome) {
 			if (w.mouseClicked(mx, my)) return true;
@@ -1087,8 +1126,8 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private void selectItem(ItemIndex.Entry entry) {
-		editing.itemId = entry.id();
-		searchField.setText(entry.name());
+		if (!editing.items.contains(entry.id())) editing.items.add(entry.id());
+		searchField.setText("");
 		searchField.setFocused(false);
 		results = List.of();
 		AutoDonutConfig.save();

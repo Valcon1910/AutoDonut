@@ -138,7 +138,7 @@ public final class AutoAuctionController {
 	public void quickList(int inventorySlot, ItemStack stack, long totalPrice) {
 		reset();
 		AuctionRule r = new AuctionRule();
-		r.itemId = ItemIndex.idOf(stack.getItem());
+		r.items.add(ItemIndex.idOf(stack.getItem()));
 		r.priceText = Long.toString(totalPrice);
 		r.pricePerItem = false;
 		r.mode = com.autodonut.client.config.QuantityMode.EXACTLY;
@@ -267,7 +267,7 @@ public final class AutoAuctionController {
 		for (int i = 0; i < scanEnd; i++) {
 			ItemStack stack = inv.getItem(i);
 			if (stack.isEmpty()) continue;
-			AuctionRule match = findRule(cfg, ItemIndex.idOf(stack.getItem()), stack.getCount(), now);
+			AuctionRule match = findRule(cfg, stack, now);
 			if (match != null) {
 				rule = match;
 				slot = i;
@@ -286,7 +286,7 @@ public final class AutoAuctionController {
 				for (AuctionRule r : cfg.rules) {
 					Long until = rulePausedUntil.get(r);
 					if (until != null && now < until) continue;
-					int want = r.splitAmount(ItemIndex.idOf(stack.getItem()), stack.getCount());
+					int want = r.splitAmount(ItemIndex.idOf(stack.getItem()), ItemIndex.tagsOf(stack), stack.getCount());
 					if (want > 0) {
 						startSplit(r, i, empty, want, stack.getCount(), now);
 						status = "Splitting " + want + " " + stack.getHoverName().getString();
@@ -304,25 +304,26 @@ public final class AutoAuctionController {
 			ItemStack stack = inv.getItem(i);
 			if (stack.isEmpty()) continue;
 			String id = ItemIndex.idOf(stack.getItem());
-			if (findRule(cfg, id, stack.getCount(), now) != null) return true;
+			if (findRule(cfg, stack, now) != null) return true;
 			for (AuctionRule r : cfg.rules) {
-				if (r.splitAmount(id, stack.getCount()) > 0) return true;
+				if (r.splitAmount(id, ItemIndex.tagsOf(stack), stack.getCount()) > 0) return true;
 			}
 		}
 		return false;
 	}
 
-	/** True when the total of any rule item went up since the last check. */
+	/** True when the total count of items matching any rule went up since the last check. */
 	private boolean pickedUpNewItem(Inventory inv, AutoDonutConfig cfg) {
 		java.util.Map<String, Integer> counts = new java.util.HashMap<>();
-		for (AuctionRule r : cfg.rules) {
-			if (r.enabled && !r.itemId.isEmpty()) counts.put(r.itemId, 0);
-		}
-		for (int i = 0; i < 36; i++) {
-			ItemStack stack = inv.getItem(i);
-			if (stack.isEmpty()) continue;
-			String id = ItemIndex.idOf(stack.getItem());
-			counts.computeIfPresent(id, (k, v) -> v + stack.getCount());
+		for (int r = 0; r < cfg.rules.size(); r++) {
+			AuctionRule rule = cfg.rules.get(r);
+			if (!rule.enabled || !rule.hasItems()) continue;
+			int total = 0;
+			for (int i = 0; i < 36; i++) {
+				ItemStack stack = inv.getItem(i);
+				if (!stack.isEmpty() && rule.itemMatches(ItemIndex.idOf(stack.getItem()), ItemIndex.tagsOf(stack))) total += stack.getCount();
+			}
+			counts.put(Integer.toString(r), total);
 		}
 		boolean increased = false;
 		for (var e : counts.entrySet()) {
@@ -706,18 +707,21 @@ public final class AutoAuctionController {
 		}
 	}
 
-	private AuctionRule findRule(AutoDonutConfig cfg, String itemId, int count, long now) {
+	private AuctionRule findRule(AutoDonutConfig cfg, ItemStack stack, long now) {
+		String itemId = ItemIndex.idOf(stack.getItem());
+		java.util.Set<String> tags = ItemIndex.tagsOf(stack);
+		int count = stack.getCount();
 		for (AuctionRule r : cfg.rules) {
 			Long until = rulePausedUntil.get(r);
 			if (until != null && now < until) continue;
-			if (r.matches(itemId, count)) return r;
+			if (r.matches(itemId, tags, count)) return r;
 		}
 		return null;
 	}
 
 	private boolean stillMatches(ItemStack stack) {
 		return rule != null && !stack.isEmpty() && (rule == quickRule || AutoDonutConfig.get().rules.contains(rule))
-				&& rule.matches(ItemIndex.idOf(stack.getItem()), stack.getCount());
+				&& rule.matches(ItemIndex.idOf(stack.getItem()), ItemIndex.tagsOf(stack), stack.getCount());
 	}
 
 	private static int emptyHotbarSlot(Inventory inv) {

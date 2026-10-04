@@ -15,6 +15,7 @@ public class ToggleSwitch extends Widget {
 	private final BooleanSupplier getter;
 	private final Consumer<Boolean> setter;
 	private final Anim knob;
+	private BooleanSupplier disabled = () -> false;
 
 	public ToggleSwitch(BooleanSupplier getter, Consumer<Boolean> setter) {
 		this.getter = getter;
@@ -24,10 +25,20 @@ public class ToggleSwitch extends Widget {
 		this.h = HEIGHT;
 	}
 
+	/** While disabled the switch is shaded and can't be flipped. */
+	public ToggleSwitch disabled(BooleanSupplier disabled) {
+		this.disabled = disabled;
+		return this;
+	}
+
 	@Override
 	protected void draw(Ui ui, int mx, int my) {
 		knob.set(getter.getAsBoolean() ? 1 : 0);
-		paint(ui, x, y, Anim.easeInOut(knob.update(ui.dt)), hover.get());
+		boolean off = disabled.getAsBoolean();
+		float base = ui.alpha;
+		if (off) ui.alpha = base * 0.4f;
+		paint(ui, x, y, Anim.easeInOut(knob.update(ui.dt)), off ? 0 : hover.get());
+		ui.alpha = base;
 	}
 
 	/**
@@ -56,6 +67,7 @@ public class ToggleSwitch extends Widget {
 	@Override
 	public boolean mouseClicked(double mx, double my) {
 		if (!contains(mx, my)) return false;
+		if (disabled.getAsBoolean()) return true;
 		boolean next = !getter.getAsBoolean();
 		setter.accept(next);
 		UiSounds.toggle(next);

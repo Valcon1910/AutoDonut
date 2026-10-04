@@ -89,7 +89,10 @@ public class FeatureCard extends Widget {
 		if (onOpen != null) ui.textRight(">", x + w - 8, y + h - 13, Anim.lerpColor(ui.theme.textMuted(), ui.theme.accent(), hv));
 
 		int sx = switchX(), sy = switchY();
+		float base = ui.alpha;
+		if (locked.getAsBoolean()) ui.alpha = base * 0.4f;
 		ToggleSwitch.paint(ui, sx, sy, k, 0);
+		ui.alpha = base;
 	}
 
 	@Override

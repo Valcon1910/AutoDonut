@@ -89,6 +89,7 @@ public class AutoDonutClient implements ClientModInitializer {
 		HudElementRegistry.addLast(id("boot"), BootOverlay::extract);
 		ClientPlayConnectionEvents.JOIN.register((listener, sender, client) -> {
 			ServerContext.onJoin(client.getSingleplayerServer() != null);
+			com.autodonut.client.auction.ItemIndex.clearTags();
 			BootOverlay.onJoin();
 		});
 	}

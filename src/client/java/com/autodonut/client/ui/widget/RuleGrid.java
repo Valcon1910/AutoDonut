@@ -29,6 +29,7 @@ public class RuleGrid extends Widget {
 	private final Map<Object, Anim> hovers = new IdentityHashMap<>();
 	private final Map<AuctionRule, Anim> knobs = new IdentityHashMap<>();
 	private final Object addKey = new Object();
+	private java.util.function.BooleanSupplier locked = () -> false;
 	private final Anim scroll = new Anim(0, 20);
 	private float scrollTarget;
 
@@ -37,6 +38,12 @@ public class RuleGrid extends Widget {
 		this.onEdit = onEdit;
 		this.onAdd = onAdd;
 		this.onChanged = onChanged;
+	}
+
+	/** While locked (offline) item switches are shaded, show off and can't be flipped. */
+	public RuleGrid locked(java.util.function.BooleanSupplier locked) {
+		this.locked = locked;
+		return this;
 	}
 
 	private int columns() {
@@ -106,7 +113,7 @@ public class RuleGrid extends Widget {
 	}
 
 	private void drawRule(Ui ui, AuctionRule rule, int cx, int cy, int cw, float hv) {
-		ItemIndex.Entry entry = ItemIndex.byId(rule.itemId);
+		ItemIndex.Entry entry = rule.hasItems() ? ItemIndex.entryFor(rule.items.get(0)) : null;
 		boolean ready = rule.isComplete();
 		boolean live = ready && rule.enabled;
 
@@ -117,7 +124,7 @@ public class RuleGrid extends Widget {
 		ItemStack stack = entry == null ? ItemStack.EMPTY : entry.stack();
 		ui.item(stack, cx + 6, cy + 5);
 
-		String name = entry == null ? "No item" : entry.name();
+		String name = entry == null ? "No item" : entry.name() + (rule.items.size() > 1 ? " +" + (rule.items.size() - 1) : "");
 		String tag = !ready ? (entry == null ? "Set up" : "Set price") : rule.enabled ? "Active" : "Off";
 		int tagColor = !ready ? ui.theme.danger() : rule.enabled ? ui.theme.success() : ui.theme.textMuted();
 		int tagW = ui.tag(tag, cx + cw - 7, cy + 9, tagColor);
@@ -137,11 +144,15 @@ public class RuleGrid extends Widget {
 				live ? ui.theme.accent() : ui.theme.textMuted());
 
 		Anim knob = knobs.computeIfAbsent(rule, r -> new Anim(r.enabled ? 1 : 0, 18));
-		knob.set(rule.enabled ? 1 : 0);
+		boolean off = locked.getAsBoolean();
+		knob.set(rule.enabled && !off ? 1 : 0);
 		float k = Anim.easeInOut(knob.update(ui.dt));
 		int sx = cx + cw - ToggleSwitch.WIDTH - 6;
 		int sy = cy + CARD_H - ToggleSwitch.HEIGHT - 5;
+		float base = ui.alpha;
+		if (off) ui.alpha = base * 0.4f;
 		ToggleSwitch.paint(ui, sx, sy, k, 0);
+		ui.alpha = base;
 	}
 
 	private void drawAdd(Ui ui, int cx, int cy, int cw, float hv) {
@@ -171,6 +182,7 @@ public class RuleGrid extends Widget {
 			int sx = cx + cw - ToggleSwitch.WIDTH - 6;
 			int sy = cy + CARD_H - ToggleSwitch.HEIGHT - 5;
 			if (mx >= sx - 3 && mx < sx + ToggleSwitch.WIDTH + 3 && my >= sy - 3 && my < sy + ToggleSwitch.HEIGHT + 3) {
+				if (locked.getAsBoolean()) return true;
 				rule.enabled = !rule.enabled;
 				UiSounds.toggle(rule.enabled);
 				onChanged.accept(rule);
