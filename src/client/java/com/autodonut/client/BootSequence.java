@@ -78,6 +78,17 @@ public final class BootSequence {
 		return STEPS.get(i).label();
 	}
 
+	/** The step as a finished action ("Loaded settings"), for the in-game check overlay. */
+	public static String stepDoneLabel(int i) {
+		return switch (STEPS.get(i).label()) {
+			case "Loading settings" -> "Loaded settings";
+			case "Connecting features" -> "Connected features";
+			case "Preparing Auto Auction" -> "Prepared Auto Auction";
+			case "Safety checks" -> "Checked safety";
+			default -> STEPS.get(i).label();
+		};
+	}
+
 	/** Runs one step; returns null when it passed, otherwise what failed and why. */
 	public static Failure runStep(int i) {
 		Step step = STEPS.get(i);
