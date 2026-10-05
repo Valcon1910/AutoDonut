@@ -89,6 +89,8 @@ public class BuyRule {
 	public boolean enabled = true;
 	public BudgetMode budgetMode = BudgetMode.MAX;
 	public String budgetExact = "";
+	/** Listing stack size filter: "64" (exactly), "<16", "<=16", ">32", ">=32". Empty = any quantity. */
+	public String quantity = "";
 	public long budgetMax = 1000;
 	public SearchMode searchMode = SearchMode.SEARCH;
 	/** Seconds to wait after a purchase before the next check. */
@@ -128,14 +130,60 @@ public class BuyRule {
 		if (budgetMode == BudgetMode.MAX) return price <= budgetMax;
 		long[] exact = parseExact(budgetExact);
 		if (exact == null) return false;
-		long v = exact[1];
-		return switch ((int) exact[0]) {
-			case -2 -> price < v;
-			case -1 -> price <= v;
-			case 1 -> price >= v;
-			case 2 -> price > v;
-			default -> price == v;
+		return compare(exact, price);
+	}
+
+	/** Whether the quantity filter is empty or valid. */
+	public boolean quantityValid() {
+		return quantity.isBlank() || parseQuantity(quantity) != null;
+	}
+
+	/** Whether a listing of {@code count} items passes the quantity filter (empty = any). */
+	public boolean allowsCount(int count) {
+		if (quantity.isBlank()) return true;
+		long[] q = parseQuantity(quantity);
+		return q != null && compare(q, count);
+	}
+
+	/** Short description of the quantity filter, e.g. "Exactly 64" or "Below 16", or "" when empty. */
+	public String quantityText() {
+		long[] q = quantity.isBlank() ? null : parseQuantity(quantity);
+		return q == null ? "" : comparisonText(q, Long.toString(q[1])) + (q[1] == 1 && q[0] == 0 ? " item" : " items");
+	}
+
+	/** Applies a parsed {comparison, amount} (see {@link #parseComparison}) to a value. */
+	public static boolean compare(long[] cmp, long value) {
+		long v = cmp[1];
+		return switch ((int) cmp[0]) {
+			case -2 -> value < v;
+			case -1 -> value <= v;
+			case 1 -> value >= v;
+			case 2 -> value > v;
+			default -> value == v;
 		};
+	}
+
+	private static String comparisonText(long[] cmp, String amount) {
+		return switch ((int) cmp[0]) {
+			case -2 -> "Below " + amount;
+			case -1 -> "Up to " + amount;
+			case 1 -> amount + " or more";
+			case 2 -> "Above " + amount;
+			default -> "Exactly " + amount;
+		};
+	}
+
+	/** Parses a quantity filter like "64", "<16" or ">=32"; null when invalid. */
+	public static long[] parseQuantity(String text) {
+		return parseComparison(text, s -> {
+			if (s.isEmpty() || s.length() > 5 || !s.chars().allMatch(Character::isDigit)) return -1;
+			return Long.parseLong(s);
+		});
+	}
+
+	/** Characters allowed while typing a quantity filter. */
+	public static boolean isQuantityChar(char c) {
+		return Character.isDigit(c) || c == '<' || c == '>' || c == '=';
 	}
 
 	/** Whether the purchase limit ("pause after N") has been reached. */
@@ -148,6 +196,14 @@ public class BuyRule {
 	 * 1 = ">=", 2 = ">". Returns null when the text isn't a valid budget.
 	 */
 	public static long[] parseExact(String text) {
+		return parseComparison(text, PriceFormat::parse);
+	}
+
+	/**
+	 * Splits an optional leading "<", "<=", ">" or ">=" off the text and parses the rest with
+	 * {@code amount}: {comparison, amount} as in {@link #parseExact}, or null when invalid.
+	 */
+	public static long[] parseComparison(String text, java.util.function.ToLongFunction<String> amount) {
 		if (text == null) return null;
 		String s = text.trim();
 		int cmp = 0;
@@ -164,7 +220,7 @@ public class BuyRule {
 			cmp = 2;
 			s = s.substring(1);
 		}
-		long v = PriceFormat.parse(s);
+		long v = amount.applyAsLong(s.trim());
 		return v > 0 ? new long[]{cmp, v} : null;
 	}
 
@@ -173,14 +229,7 @@ public class BuyRule {
 		if (budgetMode == BudgetMode.MAX) return "Max $" + PriceFormat.format(budgetMax);
 		long[] exact = parseExact(budgetExact);
 		if (exact == null) return "No budget";
-		String amount = "$" + PriceFormat.format(exact[1]);
-		return switch ((int) exact[0]) {
-			case -2 -> "Below " + amount;
-			case -1 -> "Up to " + amount;
-			case 1 -> amount + " or more";
-			case 2 -> "Above " + amount;
-			default -> "Exactly " + amount;
-		};
+		return comparisonText(exact, "$" + PriceFormat.format(exact[1]));
 	}
 
 	/** Index of the Max slider step closest to {@link #budgetMax}. */
@@ -202,6 +251,7 @@ public class BuyRule {
 		items.removeIf(e -> e == null || e.isBlank());
 		if (budgetMode == null) budgetMode = BudgetMode.MAX;
 		if (budgetExact == null) budgetExact = "";
+		if (quantity == null) quantity = "";
 		budgetExact = budgetExact.toLowerCase(Locale.ROOT);
 		if (budgetMax <= 0) budgetMax = 1000;
 		budgetMax = Math.min(budgetMax, MAX_STEPS[MAX_STEPS.length - 1]);

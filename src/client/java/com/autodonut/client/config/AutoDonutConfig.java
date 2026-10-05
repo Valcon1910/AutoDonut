@@ -163,6 +163,11 @@ public class AutoDonutConfig {
 		}
 	}
 
+	/** After adding or deleting a buy item: Auto Buy is on exactly when at least one item is. */
+	public void syncAutoBuy() {
+		autoBuyEnabled = buyRules.stream().anyMatch(r -> r.enabled);
+	}
+
 	/** Problem from the last load, or null if the file was fine. */
 	public static String lastLoadProblem;
 

@@ -102,7 +102,8 @@ public class RuleGrid<R> extends Widget {
 
 		public String detail(BuyRule r) {
 			String limit = r.pauseAfterEnabled ? "  -  " + r.purchases + "/" + r.pauseAfterCount + " bought" : "";
-			return r.budgetText() + "  -  " + r.speed.label() + limit;
+			String qty = r.quantityText().isEmpty() ? "" : "  -  " + r.quantityText();
+			return r.budgetText() + qty + "  -  " + r.speed.label() + limit;
 		}
 
 		public float[] meter(BuyRule r) {

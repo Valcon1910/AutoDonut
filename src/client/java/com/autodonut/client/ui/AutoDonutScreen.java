@@ -612,7 +612,7 @@ public class AutoDonutScreen extends Screen {
 
 	/** Set by a budget mode switch so the new budget input fades in after the rebuild. */
 	private boolean pendingFadeIn;
-	private static final int BUY_ROWS_TOP = 122;
+	private static final int BUY_ROWS_TOP = 153;
 
 	private void buildBuyEditor(int x, int w, int top) {
 		BuyRule rule = buyEditing;
@@ -667,6 +667,12 @@ public class AutoDonutScreen extends Screen {
 		}
 		widgets.add(budgetInput);
 		fadeInWidget = budgetInput;
+
+		TextField quantity = new TextField("Any amount, or e.g. 64, <16 or >=32", rule.quantity, 8, BuyRule::isQuantityChar,
+				t -> rule.quantity = t).prefix("Items  ");
+		quantity.bounds(x, top + 117, w, 18);
+		widgets.add(quantity);
+		editorMoving.put(quantity, top + 117);
 		if (pendingFadeIn) {
 			pendingFadeIn = false;
 			fadeIn.snap(0);
@@ -713,6 +719,7 @@ public class AutoDonutScreen extends Screen {
 		widgets.add(new UiButton("Done", UiButton.Style.PRIMARY, () -> setPage(Page.AUTOBUY)).bounds(x + w - doneW, by, doneW, 18));
 		widgets.add(new UiButton("Delete", UiButton.Style.DANGER, () -> {
 			cfg.buyRules.remove(rule);
+			cfg.syncAutoBuy();
 			AutoDonutConfig.save();
 			buyEditing = null;
 			setPage(Page.AUTOBUY);
@@ -760,7 +767,15 @@ public class AutoDonutScreen extends Screen {
 		if (rule.searchMode == BuyRule.SearchMode.SEARCH && rule.items.stream().anyMatch(e -> e.startsWith("#"))) {
 			summary += "  -  #tags use Browse";
 		}
-		int summaryY = top + 108 + shift;
+		int qtyLabelY = top + 108 + shift;
+		if (!underResults(qtyLabelY, qtyLabelY + 9)) ui.text("Quantity", x, qtyLabelY, t.textMuted());
+		if (!rule.quantityValid()) {
+			summary = "Enter a quantity, e.g. 64 (exactly), <16 (fewer) or >=32 (at least), or leave it empty";
+			color = t.danger();
+		} else if (!rule.quantityText().isEmpty() && rule.budgetValid()) {
+			summary += "  -  " + rule.quantityText();
+		}
+		int summaryY = top + 139 + shift;
 		if (!underResults(summaryY, summaryY + 9)) ui.text(ui.trim(summary, w), x, summaryY, color);
 	}
 
@@ -848,6 +863,7 @@ public class AutoDonutScreen extends Screen {
 	private void addBuyRule() {
 		BuyRule rule = new BuyRule();
 		cfg.buyRules.add(rule);
+		cfg.syncAutoBuy();
 		editBuyRule(rule);
 		if (searchField != null) searchField.setFocused(true);
 	}
@@ -863,7 +879,10 @@ public class AutoDonutScreen extends Screen {
 
 	/** Buy items left without an item are dropped; everything else is kept and saved. */
 	private void cleanUpBuyEditing() {
-		if (buyEditing != null && !buyEditing.hasItems()) cfg.buyRules.remove(buyEditing);
+		if (buyEditing != null && !buyEditing.hasItems()) {
+			cfg.buyRules.remove(buyEditing);
+			cfg.syncAutoBuy();
+		}
 		buyEditing = null;
 		AutoDonutConfig.save();
 	}

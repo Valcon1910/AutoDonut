@@ -381,6 +381,7 @@ public final class AutoBuyController {
 			ItemStack stack = slot.getItem();
 			if (stack.isEmpty()) continue;
 			if (!rule.itemMatches(ItemIndex.idOf(stack.getItem()), ItemIndex.tagsOf(stack))) continue;
+			if (!rule.allowsCount(stack.getCount())) continue;
 			long price = priceOf(stack);
 			if (price > 0 && rule.allows(price) && price < bestPrice) {
 				best = i;
