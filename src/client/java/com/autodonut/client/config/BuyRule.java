@@ -46,7 +46,8 @@ public class BuyRule {
 
 	/** How often /ah is checked, as a random interval between {@code minMs} and {@code maxMs}. */
 	public enum Speed {
-		SLOW("Slow", 15000, 30000),
+		SAFE("Safe", 15000, 30000),
+		SLOW("Slow", 5000, 10000),
 		BALANCED("Balanced", 2000, 5000),
 		FAST("Fast", 1000, 2000),
 		AGGRESSIVE("Aggressive", 500, 1000);

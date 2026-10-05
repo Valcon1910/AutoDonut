@@ -130,6 +130,12 @@ public class AutoDonutScreen extends Screen {
 	/** Widget that fades and slides in after a mode switch rebuilt the editor (e.g. the budget input). */
 	private Widget fadeInWidget;
 	private final Anim fadeIn = new Anim(1, 14);
+	/** Buy editor: 1 = "Purchase limit" row shown (Pause after purchases on), 0 = folded away. */
+	private final Anim limitRow = new Anim(0, 14);
+	private Widget limitRowWidget;
+	private int limitRowBase = Integer.MAX_VALUE;
+	/** Current folded height of the purchase limit row (0 when shown). */
+	private int limitCollapse;
 	private TextField searchField;
 	private List<ItemIndex.Entry> results = List.of();
 	private int resultScroll;
@@ -554,6 +560,9 @@ public class AutoDonutScreen extends Screen {
 		editorMoving.put(searchField, top + 9);
 		editorContentH = 148;
 		fadeInWidget = null;
+		limitRowWidget = null;
+		limitRowBase = Integer.MAX_VALUE;
+		limitCollapse = 0;
 
 		int half = (w - 6) / 2;
 		TextField price = new TextField("e.g. 1.5k or 250000", rule.priceText, 16, PriceFormat::isPriceChar, t -> rule.priceText = t).prefix("$ ");
@@ -671,12 +680,12 @@ public class AutoDonutScreen extends Screen {
 						new Slider(0, 60, () -> rule.delayMin, v -> {
 							rule.delayMin = v;
 							if (rule.delayMax < v) rule.delayMax = v;
-						}, v -> v + "s"), 130),
+						}, v -> v + "s"), 130).warning(() -> buyMinWaitWarning(rule)),
 				new SettingRow("Maximum wait", "Each wait is random between the two",
 						new Slider(0, 60, () -> rule.delayMax, v -> {
 							rule.delayMax = v;
 							if (rule.delayMin > v) rule.delayMin = v;
-						}, v -> v + "s"), 130),
+						}, v -> v + "s"), 130).warning(() -> buyMaxWaitWarning(rule)),
 				new SettingRow("Pause after purchases", "Stop buying this item after a number of buys",
 						new ToggleSwitch(() -> rule.pauseAfterEnabled, v -> rule.pauseAfterEnabled = v), ToggleSwitch.WIDTH),
 				new SettingRow("Purchase limit", "Buys before it pauses (" + AutoDonutClient.buyPauseKeyName() + " resumes)",
@@ -685,7 +694,8 @@ public class AutoDonutScreen extends Screen {
 						new ToggleSwitch(() -> rule.pauseKeyEnabled, v -> rule.pauseKeyEnabled = v), ToggleSwitch.WIDTH),
 				new SettingRow("Speed", "How often /ah is checked",
 						new Segmented(speedLabels(), () -> rule.speed.ordinal(), i -> rule.speed = BuyRule.Speed.values()[i])
-								.tooltips("Checks every 15–30s.", "Checks every 2–5s.", "Checks every 1–2s.", "Checks every 0.5–1s."), 220)
+								.tooltips("Checks every 15–30s.", "Checks every 5–10s.", "Checks every 2–5s.", "Checks every 1–2s.",
+										"Checks every 0.5–1s."), 250)
 						.warning(() -> switch (rule.speed) {
 							case FAST -> "Checks every 1–2s. Much faster than a person; more noticeable to staff.";
 							case AGGRESSIVE -> "Checks more than once a second. No person can do that, so staff and anti-cheat "
@@ -699,6 +709,11 @@ public class AutoDonutScreen extends Screen {
 			row.bounds(x, ry, w, SAFETY_ROW_H);
 			widgets.add(row);
 			editorMoving.put(row, ry);
+			if (i == 3) {
+				// "Purchase limit" only shows while "Pause after purchases" is on.
+				limitRowWidget = row;
+				limitRowBase = ry;
+			}
 		}
 		editorContentH = BUY_ROWS_TOP + rows.size() * (SAFETY_ROW_H + SAFETY_GAP);
 
@@ -712,6 +727,24 @@ public class AutoDonutScreen extends Screen {
 			buyEditing = null;
 			setPage(Page.AUTOBUY);
 		}).bounds(x, by, 56, 18));
+	}
+
+	private static String buyMinWaitWarning(BuyRule rule) {
+		if (rule.delayMin < 2) {
+			return "Very short wait after a purchase. Buying again within a second or two looks automated; 2s or more is safer.";
+		}
+		return null;
+	}
+
+	private static String buyMaxWaitWarning(BuyRule rule) {
+		if (rule.delayMax < 4) {
+			return "Very short maximum wait. Every purchase follows the last within " + rule.delayMax
+					+ "s, which looks automated. 4s or more is safer.";
+		}
+		if (rule.delayMax - rule.delayMin < 2) {
+			return "Minimum and maximum are almost the same, so purchases happen on a fixed rhythm. Leave at least 2s between them.";
+		}
+		return null;
 	}
 
 	private static String[] speedLabels() {
@@ -730,8 +763,11 @@ public class AutoDonutScreen extends Screen {
 		int shift = editExtra + s0;
 		ui.text("Items", x, top + s0, t.textMuted());
 		drawChips(rule.items, x, top + 30 + s0, w);
-		ui.text("Budget", x, top + 53 + shift, t.textMuted());
-		ui.text("Search mode", x + (w - 6) / 2 + 6, top + 53 + shift, t.textMuted());
+		int labelY = top + 53 + shift;
+		if (!underResults(labelY, labelY + 9)) {
+			ui.text("Budget", x, labelY, t.textMuted());
+			ui.text("Search mode", x + (w - 6) / 2 + 6, labelY, t.textMuted());
+		}
 
 		String summary;
 		int color = t.textMuted();
@@ -744,7 +780,8 @@ public class AutoDonutScreen extends Screen {
 		if (rule.searchMode == BuyRule.SearchMode.SEARCH && rule.items.stream().anyMatch(e -> e.startsWith("#"))) {
 			summary += "  -  #tags use Browse";
 		}
-		ui.text(ui.trim(summary, w), x, top + 108 + shift, color);
+		int summaryY = top + 108 + shift;
+		if (!underResults(summaryY, summaryY + 9)) ui.text(ui.trim(summary, w), x, summaryY, color);
 	}
 
 	private void buildAppearance(int x, int w, int top) {
@@ -840,6 +877,7 @@ public class AutoDonutScreen extends Screen {
 		editorScroll.snap(0);
 		editorScrollTarget = 0;
 		chipsExtra.snap((chipLines(rule.items, contentX(), contentW()) - 1) * CHIP_LINE);
+		limitRow.snap(rule.pauseAfterEnabled ? 1 : 0);
 		setPage(Page.BUY_EDIT);
 	}
 
@@ -871,6 +909,14 @@ public class AutoDonutScreen extends Screen {
 		if (editing != null && !editing.hasItems()) cfg.rules.remove(editing);
 		editing = null;
 		AutoDonutConfig.save();
+	}
+
+	/** Whether the open item results list covers any of the rows from y1 to y2. */
+	private boolean underResults(int y1, int y2) {
+		if (!resultsVisible()) return false;
+		int top = searchField.y + searchField.h + 2;
+		int bottom = top + Math.min(MAX_RESULTS_SHOWN, results.size()) * RESULT_ROW_H + 4;
+		return y2 > top && y1 < bottom;
 	}
 
 	private boolean resultsVisible() {
@@ -980,7 +1026,15 @@ public class AutoDonutScreen extends Screen {
 		for (Widget widget : widgets) {
 			if (editorClip && editorMoving.containsKey(widget)) {
 				ui.scissor(contentX() - 2, bodyTop() - 2, contentX() + contentW() + 2, editorButtonsY - 4);
-				if (widget == fadeInWidget) {
+				if (widget == limitRowWidget) {
+					float f = Anim.easeInOut(limitRow.get());
+					ui.alpha = pageAlpha * f;
+					graphics.pose().pushMatrix();
+					graphics.pose().translate(0, (1f - f) * -6f);
+					widget.render(ui, mouseX, mouseY);
+					graphics.pose().popMatrix();
+					ui.alpha = pageAlpha;
+				} else if (widget == fadeInWidget) {
 					// Freshly swapped input (mode switch): fades in and settles into place.
 					float f = Anim.easeInOut(fadeIn.update(ui.dt));
 					ui.alpha = pageAlpha * f;
@@ -1355,7 +1409,7 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private int editorMaxScroll() {
-		int contentBottom = bodyTop() + editorContentH + editExtra;
+		int contentBottom = bodyTop() + editorContentH + editExtra - limitCollapse;
 		return Math.max(0, contentBottom - (editorButtonsY - 6));
 	}
 
@@ -1367,15 +1421,24 @@ public class AutoDonutScreen extends Screen {
 		int lines = chipLines(items, contentX(), contentW());
 		chipsExtra.set((lines - 1) * CHIP_LINE);
 		editExtra = Math.round(chipsExtra.update(ui.dt));
+		if (page == Page.BUY_EDIT && buyEditing != null && limitRowWidget != null) {
+			limitRow.set(buyEditing.pauseAfterEnabled ? 1 : 0);
+			limitCollapse = Math.round((1f - Anim.easeInOut(limitRow.update(ui.dt))) * (SAFETY_ROW_H + SAFETY_GAP));
+		} else {
+			limitCollapse = 0;
+		}
 		editorScrollTarget = Math.max(0, Math.min(editorMaxScroll(), editorScrollTarget));
 		editorScroll.set(editorScrollTarget);
 		editScroll = Math.round(editorScroll.update(ui.dt));
 		for (var e : editorMoving.entrySet()) {
 			Widget wd = e.getKey();
 			int base = e.getValue();
-			int y = base + (base > top + 40 ? editExtra : 0) - editScroll;
+			int y = base + (base > top + 40 ? editExtra : 0) - editScroll - (base > limitRowBase ? limitCollapse : 0);
 			wd.bounds(wd.x, y, wd.w, wd.h);
 			wd.visible = y + wd.h > top - 2 && y < editorButtonsY - 4;
+			if (wd == limitRowWidget && limitRow.get() < 0.05f) wd.visible = false;
+			// Keep what's under an open results list out of the way so the list stays readable and clickable.
+			if (wd != searchField && underResults(y, y + wd.h)) wd.visible = false;
 		}
 	}
 
