@@ -47,7 +47,28 @@ public class ChangelogScreen extends Screen {
 	}
 
 	/** kind: 0 = text, 1 = version heading, 2 = muted note, 3 = gap. */
-	private record Line(String text, int kind) { }
+	private record Line(String text, int kind, String ver) {
+		Line(String text, int kind) {
+			this(text, kind, null);
+		}
+	}
+
+	/** Per version: 1 = expanded, 0 = collapsed, animated in between. Shared with the panel. */
+	private static final java.util.Map<String, Anim> FOLDS = new java.util.HashMap<>();
+
+	/** How open a version is right now (0..1, eased). */
+	public static float fold(String ver) {
+		Anim a = FOLDS.computeIfAbsent(ver, v -> new Anim(COLLAPSED.contains(v) ? 0 : 1, 14));
+		return Anim.easeInOut(a.get());
+	}
+
+	/** Moves every version's fold toward its collapsed/expanded target; call once per frame. */
+	public static void tickFolds(float dt) {
+		for (var e : FOLDS.entrySet()) {
+			e.getValue().set(COLLAPSED.contains(e.getKey()) ? 0 : 1);
+			e.getValue().update(dt);
+		}
+	}
 
 	public ChangelogScreen(Screen parent) {
 		super(Component.literal("Changelog"));
@@ -69,7 +90,7 @@ public class ChangelogScreen extends Screen {
 
 	private void buildLines() {
 		List<Updater.Release> releases = Updater.releases();
-		int key = releases.size() * 31 + COLLAPSED.hashCode();
+		int key = releases.size();
 		if (builtFor == key) return;
 		builtFor = key;
 		List<Line> out = new ArrayList<>();
@@ -78,8 +99,8 @@ public class ChangelogScreen extends Screen {
 			if (!out.isEmpty()) out.add(new Line("", 3));
 			boolean current = r.version().equals(AutoDonutClient.version());
 			out.add(new Line("v" + r.version(), current ? 4 : 1));
-			if (COLLAPSED.contains(r.version())) continue;
-			if (!r.date().isEmpty()) out.add(new Line(r.date(), 2));
+			String v = r.version();
+			if (!r.date().isEmpty()) out.add(new Line(r.date(), 2, v));
 			String body = r.changelog();
 			for (String raw : body.split("\n")) {
 				String line = raw.strip();
@@ -87,14 +108,15 @@ public class ChangelogScreen extends Screen {
 				if (line.startsWith("#")) line = line.replaceFirst("^#+\\s*", "");
 				if (line.startsWith("- ") || line.startsWith("* ")) line = "• " + line.substring(2);
 				line = line.replace("**", "").replace("`", "");
-				for (String l : ui.wrap(line, w)) out.add(new Line(l, 0));
+				for (String l : ui.wrap(line, w)) out.add(new Line(l, 0, v));
 			}
 		}
 		lines = out;
 	}
 
 	private int lineH(Line l) {
-		return l.kind() == 3 ? 8 : l.kind() == 1 || l.kind() == 4 ? 14 : 11;
+		int base = l.kind() == 3 ? 8 : l.kind() == 1 || l.kind() == 4 ? 14 : 11;
+		return l.ver() == null ? base : Math.round(base * fold(l.ver()));
 	}
 
 	private int contentHeight() {
@@ -135,6 +157,7 @@ public class ChangelogScreen extends Screen {
 		ui.alpha = o;
 		Theme t = ui.theme;
 		buildLines();
+		tickFolds(ui.dt);
 
 		graphics.pose().pushMatrix();
 		graphics.pose().translate(0, (1f - o) * 8f);
@@ -178,13 +201,15 @@ public class ChangelogScreen extends Screen {
 			int y = top + 2 - off;
 			for (Line l : lines) {
 				int h = lineH(l);
-				if (y + h >= top && y <= bottom) {
+				float f = l.ver() == null ? 1f : fold(l.ver());
+				ui.alpha = o * f * f;
+				if (f > 0.05f && y + h >= top && y <= bottom) {
 					switch (l.kind()) {
 						case 1, 4 -> {
 							String ver = l.text().substring(1);
 							headingHits.put(ver, new int[] {y, h});
 							boolean over = mouseY >= y && mouseY < y + h && mouseX >= px && mouseX < px + pw && mouseY >= top && mouseY < bottom;
-							arrow(ui, px + 9, y + 3, !COLLAPSED.contains(ver), over ? t.text() : t.accent());
+							arrow(ui, px + 9, y + 3, fold(ver) > 0.5f, over ? t.text() : t.accent());
 							ui.bold(l.text(), px + 16, y + 1, over ? t.accent() : t.text());
 							if (l.kind() == 4) ui.text("(installed)", px + 22 + ui.boldWidth(l.text()), y + 1, t.textMuted());
 						}
@@ -195,6 +220,7 @@ public class ChangelogScreen extends Screen {
 				}
 				y += h;
 			}
+			ui.alpha = o;
 			ui.endScissor();
 			int max = maxScroll();
 			if (max > 0) {

@@ -79,7 +79,11 @@ public class AutoDonutScreen extends Screen {
 	private int noteLineH, noteBottom;
 	private int changelogTop;
 	/** One line of a changelog box: 0 = text, 1 = version heading, 2 = muted note. */
-	private record NoteLine(String text, int kind) { }
+	private record NoteLine(String text, int kind, String ver) {
+		NoteLine(String text, int kind) {
+			this(text, kind, null);
+		}
+	}
 	/** 0 = Exactly (no range row), 1 = Custom (range slider row shown). Drives the editor's layout shift. */
 	private final Anim customRow = new Anim(0, 14);
 	private int hoveredResult = -1;
@@ -445,8 +449,8 @@ public class AutoDonutScreen extends Screen {
 			if (!out.isEmpty()) out.add(new NoteLine("", 0));
 			boolean current = r.version().equals(AutoDonutClient.version());
 			out.add(new NoteLine("v" + r.version(), current ? 4 : 1));
-			if (ChangelogScreen.COLLAPSED.contains(r.version())) continue;
-			if (!r.date().isEmpty()) out.add(new NoteLine(r.date(), 2));
+			String v = r.version();
+			if (!r.date().isEmpty()) out.add(new NoteLine(r.date(), 2, v));
 			String body = r.changelog();
 			for (String raw : body.split("\n")) {
 				String line = raw.strip();
@@ -454,7 +458,7 @@ public class AutoDonutScreen extends Screen {
 				if (line.startsWith("#")) line = line.replaceFirst("^#+\\s*", "");
 				if (line.startsWith("- ") || line.startsWith("* ")) line = "\u2022 " + line.substring(2);
 				line = line.replace("**", "").replace("`", "");
-				for (String l : ui.wrap(line, w)) out.add(new NoteLine(l, 0));
+				for (String l : ui.wrap(line, w)) out.add(new NoteLine(l, 0, v));
 			}
 		}
 		return out;
@@ -1174,34 +1178,55 @@ public class AutoDonutScreen extends Screen {
 	private void drawNotes(List<NoteLine> lines, int x, int boxTop, int w, int bottom) {
 		Theme t = ui.theme;
 		if (boxTop >= bottom - 12) return;
+		ChangelogScreen.tickFolds(ui.dt);
 		ui.round(x, boxTop, w, bottom - boxTop, 3, t.surface());
 		int lh = ui.lineHeight() + 2;
-		int visible = (bottom - boxTop - 12) / lh;
-		changelogScroll = Math.max(0, Math.min(changelogScroll, Math.max(0, lines.size() - visible)));
+		// Collapsing versions shrink their lines, so heights are summed per frame.
+		int[] heights = new int[lines.size()];
+		int total = 0;
+		for (int i = 0; i < lines.size(); i++) {
+			NoteLine l = lines.get(i);
+			heights[i] = l.ver() == null ? lh : Math.round(lh * ChangelogScreen.fold(l.ver()));
+			total += heights[i];
+		}
+		int view = bottom - boxTop - 12;
+		int maxScroll = Math.max(0, (total - view + lh - 1) / lh);
+		changelogScroll = Math.max(0, Math.min(changelogScroll, maxScroll));
 		ui.scissor(x, boxTop + 4, x + w, bottom - 4);
 		noteHeadings.clear();
 		noteLineH = lh;
 		noteBottom = bottom;
-		int yy = boxTop + 6;
-		for (int i = changelogScroll; i < lines.size() && yy <= bottom - 8; i++) {
+		float baseAlpha = ui.alpha;
+		int yy = boxTop + 6 - changelogScroll * lh;
+		for (int i = 0; i < lines.size() && yy <= bottom - 8; i++) {
 			NoteLine l = lines.get(i);
+			int h = heights[i];
+			if (yy + h < boxTop) {
+				yy += h;
+				continue;
+			}
 			if (l.kind() == 1 || l.kind() == 4) {
 				String ver = l.text().substring(1);
 				noteHeadings.put(ver, yy);
 				boolean over = lastMouseY >= yy - 1 && lastMouseY < yy - 1 + lh && lastMouseX >= x && lastMouseX < x + w;
-				ChangelogScreen.arrow(ui, x + 5, yy + 1, !ChangelogScreen.COLLAPSED.contains(ver), over ? t.text() : t.accent());
+				ChangelogScreen.arrow(ui, x + 5, yy + 1, ChangelogScreen.fold(ver) > 0.5f, over ? t.text() : t.accent());
 				ui.bold(l.text(), x + 12, yy, over ? t.accent() : t.text());
 				if (l.kind() == 4) ui.text("(installed)", x + 18 + ui.boldWidth(l.text()), yy, t.textMuted());
 			} else {
-				ui.text(l.text(), l.kind() == 2 ? x + 12 : x + 8, yy, l.kind() == 2 ? t.textMuted() : t.text());
+				float f = l.ver() == null ? 1f : ChangelogScreen.fold(l.ver());
+				if (f > 0.05f) {
+					ui.alpha = baseAlpha * f * f;
+					ui.text(l.text(), l.kind() == 2 ? x + 12 : x + 8, yy, l.kind() == 2 ? t.textMuted() : t.text());
+					ui.alpha = baseAlpha;
+				}
 			}
-			yy += lh;
+			yy += h;
 		}
 		ui.endScissor();
-		if (lines.size() > visible && visible > 0) {
+		if (maxScroll > 0) {
 			int trackH = bottom - boxTop - 8;
-			int thumbH = Math.max(10, trackH * visible / lines.size());
-			int thumbY = boxTop + 4 + (trackH - thumbH) * changelogScroll / Math.max(1, lines.size() - visible);
+			int thumbH = Math.max(10, trackH * view / Math.max(1, total));
+			int thumbY = boxTop + 4 + (trackH - thumbH) * changelogScroll / maxScroll;
 			ui.round(x + w - 4, thumbY, 2, thumbH, 1, t.border());
 		}
 	}
