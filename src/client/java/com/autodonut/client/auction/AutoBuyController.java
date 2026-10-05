@@ -496,7 +496,7 @@ public final class AutoBuyController {
 		if (!clicked) {
 			notifyPlayer(player, "Couldn't find the confirm button for Auto Buy, confirm it yourself if you want it.");
 			// Leave the menu to the player.
-			nextCheckAt.put(rule, now + humanizer.between(rule.delayMin * 1000L, rule.delayMax * 1000L) + 5000);
+			nextCheckAt.put(rule, now + humanizer.between(rule.speed.minMs, rule.speed.maxMs) + 5000);
 			reset();
 			status = "Confirm it yourself";
 			return;
@@ -523,7 +523,8 @@ public final class AutoBuyController {
 		// Counted unless the server refused: a missed message never lets it buy past the limit.
 		r.purchases++;
 		boughtThisSession++;
-		long delay = humanizer.between(r.delayMin * 1000L, r.delayMax * 1000L);
+		// After a purchase: the Safety page's min/max delay, never quicker than the rule's speed.
+		long delay = humanizer.between(cfg.minDelaySeconds * 1000L, cfg.maxDelaySeconds * 1000L);
 		nextCheckAt.put(r, now + Math.max(delay, humanizer.between(r.speed.minMs, r.speed.maxMs)));
 		if (r.limitReached()) {
 			status = "Bought " + r.purchases + " / " + r.pauseAfterCount + ", paused";

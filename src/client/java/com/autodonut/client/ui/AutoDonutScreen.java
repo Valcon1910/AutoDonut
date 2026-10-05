@@ -676,16 +676,6 @@ public class AutoDonutScreen extends Screen {
 		}
 
 		List<SettingRow> rows = List.of(
-				new SettingRow("Minimum wait", "After a purchase, before checking again",
-						new Slider(0, 60, () -> rule.delayMin, v -> {
-							rule.delayMin = v;
-							if (rule.delayMax < v) rule.delayMax = v;
-						}, v -> v + "s"), 130).warning(() -> buyMinWaitWarning(rule)),
-				new SettingRow("Maximum wait", "Each wait is random between the two",
-						new Slider(0, 60, () -> rule.delayMax, v -> {
-							rule.delayMax = v;
-							if (rule.delayMin > v) rule.delayMin = v;
-						}, v -> v + "s"), 130).warning(() -> buyMaxWaitWarning(rule)),
 				new SettingRow("Pause after purchases", "Stop buying this item after a number of buys",
 						new ToggleSwitch(() -> rule.pauseAfterEnabled, v -> rule.pauseAfterEnabled = v), ToggleSwitch.WIDTH),
 				new SettingRow("Purchase limit", "Buys before it pauses (" + AutoDonutClient.buyPauseKeyName() + " resumes)",
@@ -729,23 +719,6 @@ public class AutoDonutScreen extends Screen {
 		}).bounds(x, by, 56, 18));
 	}
 
-	private static String buyMinWaitWarning(BuyRule rule) {
-		if (rule.delayMin < 2) {
-			return "Very short wait after a purchase. Buying again within a second or two looks automated; 2s or more is safer.";
-		}
-		return null;
-	}
-
-	private static String buyMaxWaitWarning(BuyRule rule) {
-		if (rule.delayMax < 4) {
-			return "Very short maximum wait. Every purchase follows the last within " + rule.delayMax
-					+ "s, which looks automated. 4s or more is safer.";
-		}
-		if (rule.delayMax - rule.delayMin < 2) {
-			return "Minimum and maximum are almost the same, so purchases happen on a fixed rhythm. Leave at least 2s between them.";
-		}
-		return null;
-	}
 
 	/** Wide enough for every speed label (Aggressive included), leaving room for the row's title. */
 	private int speedControlWidth(int rowW) {
@@ -1577,11 +1550,11 @@ public class AutoDonutScreen extends Screen {
 			boolean over = lastMouseX >= cx && lastMouseX < cx + cw && lastMouseY >= y && lastMouseY < y + 14;
 			ui.round(cx, y, cw, 14, 3, over ? t.surfaceHover() : t.surface());
 			ui.outline(cx, y, cw, 14, 1, items.get(i).startsWith("#") ? t.accent() : t.border());
-			if (e != null && !e.stack().isEmpty()) {
+			if (e != null) {
 				ui.g.pose().pushMatrix();
 				ui.g.pose().translate(cx + 2, y + 1);
 				ui.g.pose().scale(0.75f);
-				ui.item(e.stack(), 0, 0);
+				ui.entryIcon(e, 0, 0);
 				ui.g.pose().popMatrix();
 			}
 			ui.text(ui.trim(name, 90), cx + 15, y + 3, t.text());
@@ -1756,7 +1729,7 @@ public class AutoDonutScreen extends Screen {
 				UiSounds.hover();
 			}
 			if (hovered) ui.round(x + 2, ry, w - 4, RESULT_ROW_H, 4, t.surfaceHover());
-			ui.item(e.stack(), x + 4, ry + 1);
+			ui.entryIcon(e, x + 4, ry + 1);
 			ui.text(ui.trim(e.name(), w - 120), x + 24, ry + 5, t.text());
 			ui.textRight(ui.trim(e.id(), 90), x + w - 6, ry + 5, t.textMuted());
 		}

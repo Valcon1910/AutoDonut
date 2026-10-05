@@ -223,8 +223,7 @@ public class RuleGrid<R> extends Widget {
 		ui.round(cx, cy, cw, CARD_H, 3, bg);
 		if (hv > 0.01f) ui.outline(cx, cy, cw, CARD_H, 1, Anim.lerpColor(bg, ui.theme.accent(), hv));
 
-		ItemStack stack = entry == null ? ItemStack.EMPTY : entry.stack();
-		ui.item(stack, cx + 6, cy + 5);
+		if (entry != null) ui.entryIcon(entry, cx + 6, cy + 5);
 
 		String name = entry == null ? "No item" : entry.name() + (items.size() > 1 ? " +" + (items.size() - 1) : "");
 		boolean offline = locked.getAsBoolean();

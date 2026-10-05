@@ -159,6 +159,37 @@ public final class Ui {
 		g.blit(RenderPipelines.GUI_TEXTURED, Identifier.withDefaultNamespace("textures/item/" + name + ".png"), x, y, 0, 0, 16, 16, 16, 16, 16, 16);
 	}
 
+	private static final java.util.Map<String, Identifier> FLAT_ICONS = new java.util.HashMap<>();
+
+	/**
+	 * Icon for a search entry: the real item when item data is loaded, otherwise its flat item
+	 * or block texture (the title screen has no item data yet).
+	 */
+	public void entryIcon(com.autodonut.client.auction.ItemIndex.Entry e, int x, int y) {
+		if (!e.stack().isEmpty()) {
+			item(e.stack(), x, y);
+			return;
+		}
+		if (e.id().startsWith("#") || alpha < 0.6f) return;
+		if (!FLAT_ICONS.containsKey(e.id())) FLAT_ICONS.put(e.id(), flatIcon(e.id()));
+		Identifier tex = FLAT_ICONS.get(e.id());
+		if (tex != null) g.blit(RenderPipelines.GUI_TEXTURED, tex, x, y, 0, 0, 16, 16, 16, 16, 16, 16);
+	}
+
+	private static Identifier flatIcon(String id) {
+		{
+			int c = id.indexOf(':');
+			String ns = c < 0 ? "minecraft" : id.substring(0, c);
+			String path = id.substring(c + 1);
+			var rm = net.minecraft.client.Minecraft.getInstance().getResourceManager();
+			for (String dir : new String[] {"textures/item/", "textures/block/"}) {
+				Identifier cand = Identifier.fromNamespaceAndPath(ns, dir + path + ".png");
+				if (rm.getResource(cand).isPresent()) return cand;
+			}
+			return null;
+		}
+	}
+
 	/** Greedy word wrap. */
 	public List<String> wrap(String text, int maxWidth) {
 		List<String> lines = new ArrayList<>();
