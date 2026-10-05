@@ -38,6 +38,7 @@ public final class BootSequence {
 			}),
 			new Step("Preparing Auto Auction", () -> {
 				AutoAuctionController.get().onDisconnect();
+				com.autodonut.client.auction.AutoBuyController.get().onDisconnect();
 				return null;
 			}),
 			new Step("Safety checks", () -> {

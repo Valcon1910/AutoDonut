@@ -21,9 +21,11 @@ import com.autodonut.client.Compat;
 import com.autodonut.client.Lockdown;
 import com.autodonut.client.ServerContext;
 import com.autodonut.client.auction.AutoAuctionController;
+import com.autodonut.client.auction.AutoBuyController;
 import com.autodonut.client.auction.ItemIndex;
 import com.autodonut.client.config.AuctionRule;
 import com.autodonut.client.config.AutoDonutConfig;
+import com.autodonut.client.config.BuyRule;
 import com.autodonut.client.config.PriceFormat;
 import com.autodonut.client.config.QuantityMode;
 import com.autodonut.client.ui.widget.ChoiceGrid;
@@ -42,7 +44,7 @@ import com.autodonut.client.Updater;
 
 /** The AutoDonut control panel, opened with K. Fully custom drawn with animated transitions. */
 public class AutoDonutScreen extends Screen {
-	private enum Page { HOME, AUCTION, SAFETY, APPEARANCE, CHANGELOG, UPDATING, EDIT }
+	private enum Page { HOME, AUCTION, AUTOBUY, SAFETY, APPEARANCE, CHANGELOG, UPDATING, EDIT, BUY_EDIT }
 
 	private static final float OPEN_MS = 220f;
 	private static final float CLOSE_MS = 160f;
@@ -58,6 +60,7 @@ public class AutoDonutScreen extends Screen {
 			new NavEntry("Home", Page.HOME),
 			new NavEntry("Features", null),
 			new NavEntry("Auto Auction", Page.AUCTION),
+			new NavEntry("Auto Buy", Page.AUTOBUY),
 			new NavEntry("System", null),
 			new NavEntry("Safety", Page.SAFETY),
 			new NavEntry("Appearance", Page.APPEARANCE),
@@ -120,6 +123,13 @@ public class AutoDonutScreen extends Screen {
 
 	private Page page = Page.HOME;
 	private AuctionRule editing;
+	/** Auto Buy item open in the buy editor. */
+	private BuyRule buyEditing;
+	/** Height of the open editor's content (before the chip list grows), for scrolling. */
+	private int editorContentH = 148;
+	/** Widget that fades and slides in after a mode switch rebuilt the editor (e.g. the budget input). */
+	private Widget fadeInWidget;
+	private final Anim fadeIn = new Anim(1, 14);
 	private TextField searchField;
 	private List<ItemIndex.Entry> results = List.of();
 	private int resultScroll;
@@ -303,6 +313,11 @@ public class AutoDonutScreen extends Screen {
 									cfg.showHud = v;
 									AutoDonutConfig.save();
 								}, null).locked(this::runLocked),
+						new FeatureCard("gold_nugget", "Auto Buy", "Buys matching /ah listings within your budget",
+								AutoBuyController.get()::status, () -> cfg.autoBuyEnabled, v -> {
+									cfg.setAutoBuy(v);
+									AutoDonutConfig.save();
+								}, () -> setPage(Page.AUTOBUY)).locked(() -> runLocked() || !cfg.hasBuyItems(), () -> runLocked() ? "Offline" : "No items"),
 						new FeatureCard("ender_eye", "Streamer Mode", "Hides AutoDonut from replay mods and recordings: status label, chat messages and sounds",
 								() -> Compat.hasRecorder() ? "Recording mod found" : "", () -> Compat.streamerMode(), v -> {
 									cfg.streamerMode = v;
@@ -311,11 +326,11 @@ public class AutoDonutScreen extends Screen {
 				);
 				int introH = introHeight(w);
 				int cardsTop = top + introH + 22;
-				// Rows: Auto Auction (full width), Streamer Mode (full width), then Quick Sell + HUD Status.
-				// cards = [Auto Auction, Quick Sell, HUD Status, Streamer Mode]
+				// Rows: Auto Auction + Auto Buy, Streamer Mode (full width), then Quick Sell + HUD Status.
+				// cards = [Auto Auction, Quick Sell, HUD Status, Auto Buy, Streamer Mode]
 				List<List<FeatureCard>> layout = List.of(
-						List.of(cards.get(0)),
-						List.of(cards.get(3)),
+						List.of(cards.get(0), cards.get(3)),
+						List.of(cards.get(4)),
 						List.of(cards.get(1), cards.get(2)));
 				int gap = 8;
 				int ch = Math.max(46, Math.min(72, (py + ph - 8 - cardsTop - gap * (layout.size() - 1)) / layout.size()));
@@ -336,8 +351,23 @@ public class AutoDonutScreen extends Screen {
 				master.bounds(x + w - ToggleSwitch.WIDTH - 8, top + 8, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT);
 				widgets.add(master);
 
-				RuleGrid grid = new RuleGrid(cfg.rules, this::editRule, this::addRule, rule -> {
+				RuleGrid<AuctionRule> grid = new RuleGrid<>(cfg.rules, RuleGrid.AUCTION, this::editRule, this::addRule, rule -> {
 					cfg.onRuleToggled(rule);
+					AutoDonutConfig.save();
+				}).locked(this::runLocked);
+				grid.bounds(x, top + 50, w, py + ph - 8 - (top + 50));
+				widgets.add(grid);
+			}
+			case AUTOBUY -> {
+				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoBuyEnabled && !runLocked() && cfg.hasBuyItems(), v -> {
+					cfg.setAutoBuy(v);
+					AutoDonutConfig.save();
+				}).disabled(() -> runLocked() || !cfg.hasBuyItems());
+				master.bounds(x + w - ToggleSwitch.WIDTH - 8, top + 8, ToggleSwitch.WIDTH, ToggleSwitch.HEIGHT);
+				widgets.add(master);
+
+				RuleGrid<BuyRule> grid = new RuleGrid<>(cfg.buyRules, RuleGrid.BUY, this::editBuyRule, this::addBuyRule, rule -> {
+					cfg.onBuyRuleToggled(rule);
 					AutoDonutConfig.save();
 				}).locked(this::runLocked);
 				grid.bounds(x, top + 50, w, py + ph - 8 - (top + 50));
@@ -408,6 +438,7 @@ public class AutoDonutScreen extends Screen {
 			case UPDATING -> buildUpdating(x, w, top);
 			case CHANGELOG -> changelogScroll = 0;
 			case EDIT -> buildEditor(x, w, top);
+			case BUY_EDIT -> buildBuyEditor(x, w, top);
 		}
 	}
 
@@ -521,6 +552,8 @@ public class AutoDonutScreen extends Screen {
 		widgets.add(searchField);
 		editorMoving.clear();
 		editorMoving.put(searchField, top + 9);
+		editorContentH = 148;
+		fadeInWidget = null;
 
 		int half = (w - 6) / 2;
 		TextField price = new TextField("e.g. 1.5k or 250000", rule.priceText, 16, PriceFormat::isPriceChar, t -> rule.priceText = t).prefix("$ ");
@@ -566,6 +599,152 @@ public class AutoDonutScreen extends Screen {
 			editing = null;
 			setPage(Page.AUCTION);
 		}).bounds(x, by, 56, 18));
+	}
+
+	/** Set by a budget mode switch so the new budget input fades in after the rebuild. */
+	private boolean pendingFadeIn;
+	private static final int BUY_ROWS_TOP = 122;
+
+	private void buildBuyEditor(int x, int w, int top) {
+		BuyRule rule = buyEditing;
+		if (rule == null) return;
+		searchField = new TextField("Add items, e.g. Diamond or #foods", "", 40, c -> true, text -> {
+			resultScroll = 0;
+			results = text.trim().startsWith("#") ? ItemIndex.searchTags(text, 60) : ItemIndex.search(text, 60);
+		}).searchIcon();
+		searchField.bounds(x, top + 9, w, 18);
+		widgets.add(searchField);
+		editorMoving.clear();
+		editorMoving.put(searchField, top + 9);
+
+		int half = (w - 6) / 2;
+		BuyRule.BudgetMode[] budgetModes = BuyRule.BudgetMode.values();
+		String[] budgetLabels = new String[budgetModes.length];
+		for (int i = 0; i < budgetModes.length; i++) budgetLabels[i] = budgetModes[i].label();
+		Segmented budget = new Segmented(budgetLabels, () -> rule.budgetMode.ordinal(), i -> {
+			if (rule.budgetMode != budgetModes[i]) {
+				rule.budgetMode = budgetModes[i];
+				pendingFadeIn = true;
+				rebuildPending = true;
+			}
+		}).tooltips("Exact: type a price. \"1k\" buys listings of exactly $1K, \"<1k\" below it, \">500\" above $500 (also <= and >=).",
+				"Max: buys any matching listing priced at or below the slider's amount.");
+		budget.bounds(x, top + 62, half, 18);
+		widgets.add(budget);
+		editorMoving.put(budget, top + 62);
+
+		BuyRule.SearchMode[] searchModes = BuyRule.SearchMode.values();
+		String[] searchLabels = new String[searchModes.length];
+		for (int i = 0; i < searchModes.length; i++) searchLabels[i] = searchModes[i].label();
+		Segmented search = new Segmented(searchLabels, () -> rule.searchMode.ordinal(), i -> rule.searchMode = searchModes[i])
+				.tooltips("Opens /ah with the item's name so only matching listings show. Fastest; needs a plain item (not a #tag) to search for.",
+						"Opens /ah and flips through the pages looking for matches. Works with #tags, but slower and more clicks.");
+		search.bounds(x + half + 6, top + 62, w - half - 6, 18);
+		widgets.add(search);
+		editorMoving.put(search, top + 62);
+
+		Widget budgetInput;
+		if (rule.budgetMode == BuyRule.BudgetMode.EXACT) {
+			budgetInput = new TextField("e.g. 1k, <1k or >500", rule.budgetExact, 16, BuyRule::isBudgetChar, t -> rule.budgetExact = t)
+					.prefix("Price  ");
+			budgetInput.bounds(x, top + 86, w, 18);
+			editorMoving.put(budgetInput, top + 86);
+		} else {
+			long[] steps = BuyRule.MAX_STEPS;
+			budgetInput = new Slider(0, steps.length - 1, rule::maxStepIndex, i -> rule.budgetMax = steps[i],
+					i -> "$" + PriceFormat.format(steps[i])).labelWidth(44);
+			budgetInput.bounds(x, top + 88, w, 14);
+			editorMoving.put(budgetInput, top + 88);
+		}
+		widgets.add(budgetInput);
+		fadeInWidget = budgetInput;
+		if (pendingFadeIn) {
+			pendingFadeIn = false;
+			fadeIn.snap(0);
+			fadeIn.set(1);
+		} else {
+			fadeIn.snap(1);
+		}
+
+		List<SettingRow> rows = List.of(
+				new SettingRow("Minimum wait", "After a purchase, before checking again",
+						new Slider(0, 60, () -> rule.delayMin, v -> {
+							rule.delayMin = v;
+							if (rule.delayMax < v) rule.delayMax = v;
+						}, v -> v + "s"), 130),
+				new SettingRow("Maximum wait", "Each wait is random between the two",
+						new Slider(0, 60, () -> rule.delayMax, v -> {
+							rule.delayMax = v;
+							if (rule.delayMin > v) rule.delayMin = v;
+						}, v -> v + "s"), 130),
+				new SettingRow("Pause after purchases", "Stop buying this item after a number of buys",
+						new ToggleSwitch(() -> rule.pauseAfterEnabled, v -> rule.pauseAfterEnabled = v), ToggleSwitch.WIDTH),
+				new SettingRow("Purchase limit", "Buys before it pauses (" + AutoDonutClient.buyPauseKeyName() + " resumes)",
+						new Slider(1, 64, () -> rule.pauseAfterCount, v -> rule.pauseAfterCount = v, v -> Integer.toString(v)), 130),
+				new SettingRow("Pause key", "Pressing " + AutoDonutClient.buyPauseKeyName() + " pauses and resumes this item",
+						new ToggleSwitch(() -> rule.pauseKeyEnabled, v -> rule.pauseKeyEnabled = v), ToggleSwitch.WIDTH),
+				new SettingRow("Speed", "How often /ah is checked",
+						new Segmented(speedLabels(), () -> rule.speed.ordinal(), i -> rule.speed = BuyRule.Speed.values()[i])
+								.tooltips("Checks every 15–30s.", "Checks every 2–5s.", "Checks every 1–2s.", "Checks every 0.5–1s."), 220)
+						.warning(() -> switch (rule.speed) {
+							case FAST -> "Checks every 1–2s. Much faster than a person; more noticeable to staff.";
+							case AGGRESSIVE -> "Checks more than once a second. No person can do that, so staff and anti-cheat "
+									+ "can spot it easily. Only use it briefly, if at all.";
+							default -> null;
+						})
+		);
+		for (int i = 0; i < rows.size(); i++) {
+			int ry = top + BUY_ROWS_TOP + i * (SAFETY_ROW_H + SAFETY_GAP);
+			SettingRow row = rows.get(i);
+			row.bounds(x, ry, w, SAFETY_ROW_H);
+			widgets.add(row);
+			editorMoving.put(row, ry);
+		}
+		editorContentH = BUY_ROWS_TOP + rows.size() * (SAFETY_ROW_H + SAFETY_GAP);
+
+		int by = Math.max(top + 156, py + ph - 26);
+		editorButtonsY = by;
+		int doneW = 60;
+		widgets.add(new UiButton("Done", UiButton.Style.PRIMARY, () -> setPage(Page.AUTOBUY)).bounds(x + w - doneW, by, doneW, 18));
+		widgets.add(new UiButton("Delete", UiButton.Style.DANGER, () -> {
+			cfg.buyRules.remove(rule);
+			AutoDonutConfig.save();
+			buyEditing = null;
+			setPage(Page.AUTOBUY);
+		}).bounds(x, by, 56, 18));
+	}
+
+	private static String[] speedLabels() {
+		BuyRule.Speed[] speeds = BuyRule.Speed.values();
+		String[] labels = new String[speeds.length];
+		for (int i = 0; i < speeds.length; i++) labels[i] = speeds[i].label();
+		return labels;
+	}
+
+	/** Labels and the budget summary line of the buy editor (moves with the chips and scrolling). */
+	private void drawBuyEditorDecor(int x, int top, int w) {
+		Theme t = ui.theme;
+		BuyRule rule = buyEditing;
+		if (rule == null) return;
+		int s0 = -editScroll;
+		int shift = editExtra + s0;
+		ui.text("Items", x, top + s0, t.textMuted());
+		drawChips(rule.items, x, top + 30 + s0, w);
+		ui.text("Budget", x, top + 53 + shift, t.textMuted());
+		ui.text("Search mode", x + (w - 6) / 2 + 6, top + 53 + shift, t.textMuted());
+
+		String summary;
+		int color = t.textMuted();
+		if (!rule.budgetValid()) {
+			summary = "Enter a price, e.g. 1k (exactly), <1k (below) or >500 (above)";
+			color = t.danger();
+		} else {
+			summary = "Budget: " + rule.budgetText() + " for the whole listing";
+		}
+		if (rule.searchMode == BuyRule.SearchMode.SEARCH && rule.items.stream().anyMatch(e -> e.startsWith("#"))) {
+			summary += "  -  #tags use Browse";
+		}
+		ui.text(ui.trim(summary, w), x, top + 108 + shift, color);
 	}
 
 	private void buildAppearance(int x, int w, int top) {
@@ -626,6 +805,7 @@ public class AutoDonutScreen extends Screen {
 
 	private void setPage(Page next) {
 		if (page == Page.EDIT && next != Page.EDIT) cleanUpEditing();
+		if (page == Page.BUY_EDIT && next != Page.BUY_EDIT) cleanUpBuyEditing();
 		page = next;
 		pageAnim.snap(0);
 		pageAnim.set(1);
@@ -643,9 +823,43 @@ public class AutoDonutScreen extends Screen {
 		editing = rule;
 		editorScroll.snap(0);
 		editorScrollTarget = 0;
-		chipsExtra.snap((chipLines(rule, contentX(), contentW()) - 1) * CHIP_LINE);
+		chipsExtra.snap((chipLines(rule.items, contentX(), contentW()) - 1) * CHIP_LINE);
 		customRow.snap(rule.mode == QuantityMode.CUSTOM ? 1 : 0);
 		setPage(Page.EDIT);
+	}
+
+	private void addBuyRule() {
+		BuyRule rule = new BuyRule();
+		cfg.buyRules.add(rule);
+		editBuyRule(rule);
+		if (searchField != null) searchField.setFocused(true);
+	}
+
+	private void editBuyRule(BuyRule rule) {
+		buyEditing = rule;
+		editorScroll.snap(0);
+		editorScrollTarget = 0;
+		chipsExtra.snap((chipLines(rule.items, contentX(), contentW()) - 1) * CHIP_LINE);
+		setPage(Page.BUY_EDIT);
+	}
+
+	/** Buy items left without an item are dropped; everything else is kept and saved. */
+	private void cleanUpBuyEditing() {
+		if (buyEditing != null && !buyEditing.hasItems()) cfg.buyRules.remove(buyEditing);
+		buyEditing = null;
+		AutoDonutConfig.save();
+	}
+
+	/** Whether an item editor (Auto Auction or Auto Buy) is the open page. */
+	private boolean editorPage() {
+		return page == Page.EDIT || page == Page.BUY_EDIT;
+	}
+
+	/** Item entries of the rule being edited, or null when no editor is open. */
+	private List<String> editItems() {
+		if (page == Page.EDIT && editing != null) return editing.items;
+		if (page == Page.BUY_EDIT && buyEditing != null) return buyEditing.items;
+		return null;
 	}
 
 	private void finishEditing() {
@@ -748,7 +962,7 @@ public class AutoDonutScreen extends Screen {
 		ui.alpha = openProgress * pe;
 		graphics.pose().pushMatrix();
 		graphics.pose().translate((1f - pe) * 10f, 0);
-		boolean editorClip = page == Page.EDIT && editing != null;
+		boolean editorClip = editorPage() && editItems() != null;
 		if (editorClip) {
 			layoutEditor();
 			ui.scissor(contentX() - 2, bodyTop() - 2, contentX() + contentW() + 2, editorButtonsY - 4);
@@ -766,7 +980,18 @@ public class AutoDonutScreen extends Screen {
 		for (Widget widget : widgets) {
 			if (editorClip && editorMoving.containsKey(widget)) {
 				ui.scissor(contentX() - 2, bodyTop() - 2, contentX() + contentW() + 2, editorButtonsY - 4);
-				widget.render(ui, mouseX, mouseY);
+				if (widget == fadeInWidget) {
+					// Freshly swapped input (mode switch): fades in and settles into place.
+					float f = Anim.easeInOut(fadeIn.update(ui.dt));
+					ui.alpha = pageAlpha * f;
+					graphics.pose().pushMatrix();
+					graphics.pose().translate(0, (1f - f) * -6f);
+					widget.render(ui, mouseX, mouseY);
+					graphics.pose().popMatrix();
+					ui.alpha = pageAlpha;
+				} else {
+					widget.render(ui, mouseX, mouseY);
+				}
 				ui.endScissor();
 				continue;
 			}
@@ -816,7 +1041,7 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private int activeNavIndex() {
-		Page target = page == Page.EDIT ? Page.AUCTION : page;
+		Page target = page == Page.EDIT ? Page.AUCTION : page == Page.BUY_EDIT ? Page.AUTOBUY : page;
 		for (int i = 0; i < NAV.length; i++) {
 			if (NAV[i].page() == target) return i;
 		}
@@ -901,8 +1126,11 @@ public class AutoDonutScreen extends Screen {
 			int color = i == active ? t.text() : Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
 			ui.text(entry.label(), px + 14 + Math.round(navHover[i].get() * 2), iy + 5, color);
 			if (entry.page() == Page.AUCTION) {
-				activeLight.update(ui.dt);
-				ui.circle(px + sw - 14, iy + 9, 2, activeLightColor());
+				auctionLight.anim.update(ui.dt);
+				ui.circle(px + sw - 14, iy + 9, 2, auctionLight.color(AutoAuctionController.get().isActive()));
+			} else if (entry.page() == Page.AUTOBUY) {
+				buyLight.anim.update(ui.dt);
+				ui.circle(px + sw - 14, iy + 9, 2, buyLight.color(AutoBuyController.get().isActive()));
 			}
 			ui.alpha = baseAlpha;
 		}
@@ -937,20 +1165,24 @@ public class AutoDonutScreen extends Screen {
 		String title = switch (page) {
 			case HOME -> "Home";
 			case AUCTION -> "Auto Auction";
+			case AUTOBUY -> "Auto Buy";
 			case SAFETY -> "Safety";
 			case APPEARANCE -> "Appearance";
 			case UPDATING -> "Updating";
 			case CHANGELOG -> "Changelog";
 			case EDIT -> "Edit Item";
+			case BUY_EDIT -> "Edit Buy Item";
 		};
 		String subtitle = switch (page) {
 			case HOME -> "Your Donut SMP companion.";
 			case AUCTION -> "Pick items to sell. Matching stacks are listed on /ah automatically.";
+			case AUTOBUY -> "Pick items to buy. Listings within your budget are bought from /ah.";
 			case SAFETY -> "Pacing that keeps every action irregular and human.";
 			case APPEARANCE -> "Pick a colour style and an accent. Changes fade in instantly.";
 			case UPDATING -> "Keep AutoDonut up to date and see what the next version brings.";
 			case CHANGELOG -> "What changed in your version and every one before it.";
 			case EDIT -> "Choose the item, its price and which stack sizes to sell.";
+			case BUY_EDIT -> "Choose the items, your budget and how Auto Buy looks for them.";
 		};
 		int hy = py + TOP + 8;
 		ui.fill(x, hy, x + 2, hy + 21, t.accent());
@@ -973,12 +1205,25 @@ public class AutoDonutScreen extends Screen {
 				String hourText = auction.listedLastHour() + " this hour";
 				ui.text(ui.trim(auction.status() + "  -  " + hourText, w - 50), x + 8, top + 21, t.textMuted());
 			}
+			case AUTOBUY -> {
+				AutoBuyController buy = AutoBuyController.get();
+				boolean active = buy.isActive();
+				ui.round(x, top, w, 42, 3, t.surface());
+				if (cfg.autoBuyEnabled) ui.outline(x, top, w, 42, 1, t.accent());
+				ui.text("Auto Buy", x + 8, top + 7, cfg.autoBuyEnabled ? t.accent() : t.text());
+				String tag = buy.keyPaused() ? "Paused" : active ? "Running" : cfg.autoBuyEnabled ? "Waiting" : "Off";
+				int tagColor = buy.keyPaused() ? Ui.WARNING : active ? t.success() : t.textMuted();
+				ui.text(tag, x + 14 + ui.width("Auto Buy"), top + 7, tagColor);
+				String bought = buy.boughtThisSession() + " bought  -  " + AutoDonutClient.buyPauseKeyName() + " pauses";
+				ui.text(ui.trim(buy.status() + "  -  " + bought, w - 50), x + 8, top + 21, t.textMuted());
+			}
+			case BUY_EDIT -> drawBuyEditorDecor(x, top, w);
 			case EDIT -> {
 				AuctionRule rule = editing;
 				if (rule == null) return;
 				int s0 = -editScroll;
 				ui.text("Items", x, top + s0, t.textMuted());
-				drawChips(rule, x, top + 30 + s0, w);
+				drawChips(rule.items, x, top + 30 + s0, w);
 				ui.text("Price", x, top + 53 + editExtra + s0, t.textMuted());
 				ui.text("Quantity", x + (w - 6) / 2 + 6, top + 53 + editExtra + s0, t.textMuted());
 
@@ -1027,24 +1272,32 @@ public class AutoDonutScreen extends Screen {
 		return Anim.lerpColor(Anim.lerpColor(color, ui.theme.sidebar(), 0.7f), color, k);
 	}
 
-	/** Fades from grey to green when Auto Auction turns on, then starts pulsing from full brightness. */
-	private final Anim activeLight = new Anim(AutoAuctionController.get().isActive() ? 1 : 0, 6);
-	private long activeSince = -1;
+	/** Sidebar light that fades from grey to green when its feature turns on, then pulses from full brightness. */
+	private final class ActiveLight {
+		final Anim anim;
+		long since = -1;
 
-	private int activeLightColor() {
-		Theme t = ui.theme;
-		boolean active = AutoAuctionController.get().isActive();
-		activeLight.set(active ? 1 : 0);
-		float a = activeLight.get();
-		if (!active || a < 0.999f) {
-			activeSince = -1;
-			return Anim.lerpColor(t.track(), t.success(), a);
+		ActiveLight(boolean active) {
+			anim = new Anim(active ? 1 : 0, 6);
 		}
-		if (activeSince < 0) activeSince = System.currentTimeMillis();
-		double phase = ((System.currentTimeMillis() - activeSince) % 1600) / 1600.0 * Math.PI * 2;
-		float k = 0.35f + 0.65f * (float) (0.5 + 0.5 * Math.cos(phase));
-		return Anim.lerpColor(Anim.lerpColor(t.success(), t.sidebar(), 0.7f), t.success(), k);
+
+		int color(boolean active) {
+			Theme t = ui.theme;
+			anim.set(active ? 1 : 0);
+			float a = anim.get();
+			if (!active || a < 0.999f) {
+				since = -1;
+				return Anim.lerpColor(t.track(), t.success(), a);
+			}
+			if (since < 0) since = System.currentTimeMillis();
+			double phase = ((System.currentTimeMillis() - since) % 1600) / 1600.0 * Math.PI * 2;
+			float k = 0.35f + 0.65f * (float) (0.5 + 0.5 * Math.cos(phase));
+			return Anim.lerpColor(Anim.lerpColor(t.success(), t.sidebar(), 0.7f), t.success(), k);
+		}
 	}
+
+	private final ActiveLight auctionLight = new ActiveLight(AutoAuctionController.get().isActive());
+	private final ActiveLight buyLight = new ActiveLight(AutoBuyController.get().isActive());
 
 	private int safetyMaxScroll() {
 		int content = safetyRows.size() * (SAFETY_ROW_H + SAFETY_GAP) - SAFETY_GAP;
@@ -1080,11 +1333,11 @@ public class AutoDonutScreen extends Screen {
 	private static final int CHIP_LINE = 18;
 
 	/** Number of lines the chips wrap onto at this width. */
-	private int chipLines(AuctionRule rule, int x, int w) {
-		if (!rule.hasItems()) return 1;
+	private int chipLines(List<String> items, int x, int w) {
+		if (items.isEmpty()) return 1;
 		int cx = x;
 		int lines = 1;
-		for (String item : rule.items) {
+		for (String item : items) {
 			int cw = chipWidth(item);
 			if (cx + cw > x + w && cx > x) {
 				lines++;
@@ -1102,15 +1355,16 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private int editorMaxScroll() {
-		int contentBottom = bodyTop() + 148 + editExtra;
+		int contentBottom = bodyTop() + editorContentH + editExtra;
 		return Math.max(0, contentBottom - (editorButtonsY - 6));
 	}
 
 	/** Moves editor widgets for the current chip height and scroll; called every frame on the editor. */
 	private void layoutEditor() {
-		if (editing == null) return;
+		List<String> items = editItems();
+		if (items == null) return;
 		int top = bodyTop();
-		int lines = chipLines(editing, contentX(), contentW());
+		int lines = chipLines(items, contentX(), contentW());
 		chipsExtra.set((lines - 1) * CHIP_LINE);
 		editExtra = Math.round(chipsExtra.update(ui.dt));
 		editorScrollTarget = Math.max(0, Math.min(editorMaxScroll(), editorScrollTarget));
@@ -1231,19 +1485,19 @@ public class AutoDonutScreen extends Screen {
 		}
 	}
 
-	private void drawChips(AuctionRule rule, int x, int y, int w) {
+	private void drawChips(List<String> items, int x, int y, int w) {
 		Theme t = ui.theme;
 		chipHits.clear();
-		if (!rule.hasItems()) {
+		if (items.isEmpty()) {
 			ui.text("No items yet: search above, or type # for a tag like #foods", x + 2, y + 3, t.textMuted());
 			return;
 		}
 		int cx = x;
 		int baseY = y;
-		for (int i = 0; i < rule.items.size(); i++) {
-			ItemIndex.Entry e = ItemIndex.entryFor(rule.items.get(i));
-			String name = e == null ? rule.items.get(i) : e.name();
-			int cw = chipWidth(rule.items.get(i));
+		for (int i = 0; i < items.size(); i++) {
+			ItemIndex.Entry e = ItemIndex.entryFor(items.get(i));
+			String name = e == null ? items.get(i) : e.name();
+			int cw = chipWidth(items.get(i));
 			if (cx + cw > x + w && cx > x) {
 				// Wrap onto the next line; new lines slide in as the area grows.
 				cx = x;
@@ -1252,7 +1506,7 @@ public class AutoDonutScreen extends Screen {
 			if (y + 14 > baseY + CHIP_LINE + editExtra) break;
 			boolean over = lastMouseX >= cx && lastMouseX < cx + cw && lastMouseY >= y && lastMouseY < y + 14;
 			ui.round(cx, y, cw, 14, 3, over ? t.surfaceHover() : t.surface());
-			ui.outline(cx, y, cw, 14, 1, rule.items.get(i).startsWith("#") ? t.accent() : t.border());
+			ui.outline(cx, y, cw, 14, 1, items.get(i).startsWith("#") ? t.accent() : t.border());
 			if (e != null && !e.stack().isEmpty()) {
 				ui.g.pose().pushMatrix();
 				ui.g.pose().translate(cx + 2, y + 1);
@@ -1520,10 +1774,11 @@ public class AutoDonutScreen extends Screen {
 			}
 		}
 
-		if (page == Page.EDIT && editing != null) {
+		List<String> chipItems = editItems();
+		if (chipItems != null) {
 			for (int[] c : chipHits) {
 				if (mx >= c[0] && mx < c[0] + c[2] && my >= c[1] && my < c[1] + c[3]) {
-					if (c[4] < editing.items.size()) editing.items.remove(c[4]);
+					if (c[4] < chipItems.size()) chipItems.remove(c[4]);
 					UiSounds.click();
 					AutoDonutConfig.save();
 					return true;
@@ -1541,7 +1796,8 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private void selectItem(ItemIndex.Entry entry) {
-		if (!editing.items.contains(entry.id())) editing.items.add(entry.id());
+		List<String> items = editItems();
+		if (items != null && !items.contains(entry.id())) items.add(entry.id());
 		searchField.setText("");
 		searchField.setFocused(false);
 		results = List.of();
@@ -1570,7 +1826,7 @@ public class AutoDonutScreen extends Screen {
 			resultScroll = Math.max(0, Math.min(max, resultScroll - (int) Math.signum(scrollY)));
 			return true;
 		}
-		if (page == Page.EDIT && editorMaxScroll() > 0 && my >= bodyTop() && my < editorButtonsY) {
+		if (editorPage() && editorMaxScroll() > 0 && my >= bodyTop() && my < editorButtonsY) {
 			editorScrollTarget = Math.max(0, Math.min(editorMaxScroll(), editorScrollTarget - (float) scrollY * 22));
 			return true;
 		}
@@ -1654,6 +1910,7 @@ public class AutoDonutScreen extends Screen {
 	public void removed() {
 		super.removed();
 		if (page == Page.EDIT) cleanUpEditing();
+		if (page == Page.BUY_EDIT) cleanUpBuyEditing();
 		AutoDonutConfig.save();
 	}
 }

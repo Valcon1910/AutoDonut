@@ -32,6 +32,10 @@ public class AutoDonutConfig {
 	/** Command sent to list the held item, without the leading slash. {price} is replaced with the total price. */
 	public String sellCommand = "ah sell {price}";
 
+	// Auto Buy
+	public boolean autoBuyEnabled = false;
+	public List<BuyRule> buyRules = new ArrayList<>();
+
 	// Safety
 	public boolean onlyOnDonut = true;
 	public int minDelaySeconds = 2;
@@ -139,6 +143,26 @@ public class AutoDonutConfig {
 		}
 	}
 
+	/** Whether at least one Auto Buy item is fully set up (item + budget). */
+	public boolean hasBuyItems() {
+		return buyRules.stream().anyMatch(BuyRule::isComplete);
+	}
+
+	/** Master switch for Auto Buy: turns every buy item on or off with it. */
+	public void setAutoBuy(boolean on) {
+		autoBuyEnabled = on;
+		for (BuyRule r : buyRules) r.enabled = on;
+	}
+
+	/** Same as {@link #onRuleToggled} for Auto Buy items. */
+	public void onBuyRuleToggled(BuyRule rule) {
+		if (rule.enabled) {
+			autoBuyEnabled = true;
+		} else if (buyRules.stream().noneMatch(r -> r.enabled)) {
+			autoBuyEnabled = false;
+		}
+	}
+
 	/** Problem from the last load, or null if the file was fine. */
 	public static String lastLoadProblem;
 
@@ -189,6 +213,9 @@ public class AutoDonutConfig {
 		if (rules == null) rules = new ArrayList<>();
 		rules.removeIf(r -> r == null);
 		for (AuctionRule r : rules) r.sanitize();
+		if (buyRules == null) buyRules = new ArrayList<>();
+		buyRules.removeIf(r -> r == null);
+		for (BuyRule r : buyRules) r.sanitize();
 		if (darkStyle == null) darkStyle = "Midnight";
 		if (lightStyle == null) lightStyle = "Daylight";
 		if (accent == null) accent = "Donut Pink";

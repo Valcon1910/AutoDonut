@@ -13,6 +13,7 @@ public class Segmented extends Widget {
 	private final IntSupplier getter;
 	private final IntConsumer setter;
 	private final Anim slide;
+	private String[] tooltips;
 
 	public Segmented(String[] options, IntSupplier getter, IntConsumer setter) {
 		this.options = options;
@@ -20,6 +21,12 @@ public class Segmented extends Widget {
 		this.setter = setter;
 		this.slide = new Anim(getter.getAsInt(), 18);
 		this.h = 18;
+	}
+
+	/** Descriptions shown as a tooltip while hovering each option (null entries show none). */
+	public Segmented tooltips(String... tooltips) {
+		this.tooltips = tooltips;
+		return this;
 	}
 
 	@Override
@@ -35,7 +42,14 @@ public class Segmented extends Widget {
 			int sx = x + 2 + Math.round(i * segW);
 			float closeness = Anim.clamp01(1f - Math.abs(s - i));
 			int color = Anim.lerpColor(ui.theme.textMuted(), ui.theme.onAccent(), closeness);
-			boolean hovered = i != selected && mx >= sx && mx < sx + segW && my >= y && my < y + h;
+			boolean over = mx >= sx && mx < sx + segW && my >= y && my < y + h;
+			boolean hovered = i != selected && over;
+			if (over && tooltips != null && i < tooltips.length && tooltips[i] != null) {
+				ui.tooltip = tooltips[i];
+				ui.tooltipWarning = false;
+				ui.tooltipX = mx;
+				ui.tooltipY = my;
+			}
 			if (hovered) color = ui.theme.text();
 			ui.textCentered(ui.trim(options[i], Math.round(segW) - 4), sx + Math.round(segW / 2), y + (h - ui.lineHeight()) / 2 + 1, color);
 		}

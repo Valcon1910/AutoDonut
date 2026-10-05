@@ -45,6 +45,7 @@ public final class Lockdown {
 		cfg.lockdownReason = reason;
 		AutoDonutConfig.save();
 		AutoAuctionController.get().reset();
+		com.autodonut.client.auction.AutoBuyController.get().reset();
 		AutoDonut.LOGGER.warn("AutoDonut lockdown: {}", reason);
 	}
 

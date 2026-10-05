@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import com.autodonut.client.Compat;
 import com.autodonut.client.auction.AutoAuctionController;
+import com.autodonut.client.auction.AutoBuyController;
 import com.autodonut.client.config.AutoDonutConfig;
 
 /** Small pill in the top-left corner showing what Auto Auction is doing. */
@@ -25,6 +26,7 @@ public final class StatusHud {
 		Minecraft mc = Minecraft.getInstance();
 		AutoDonutConfig cfg = AutoDonutConfig.get();
 		AutoAuctionController auction = AutoAuctionController.get();
+		AutoBuyController buy = AutoBuyController.get();
 
 		long now = System.nanoTime();
 		UI.dt = Math.min(0.1f, (now - lastFrame) / 1_000_000_000f);
@@ -33,12 +35,12 @@ public final class StatusHud {
 		boolean noResponse = !com.autodonut.client.ServerProbe.responding();
 		boolean allowed = cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active() && mc.player != null;
 		boolean lagWarning = auction.lagging() || noResponse;
-		boolean wanted = allowed && (auction.isActive() || auction.quickSelling() || lagWarning);
+		boolean wanted = allowed && (auction.isActive() || buy.isActive() || auction.quickSelling() || lagWarning);
 		// Full label only with no screen open and something to show; otherwise it folds to the logo badge,
 		// which stays for 10 seconds after the last activity and then fades away.
 		boolean expanded = wanted && mc.gui.screen() == null;
 		long ms = System.currentTimeMillis();
-		if (expanded || auction.busy() || auction.quickSelling() || lagWarning) lastActivity = ms;
+		if (expanded || auction.busy() || buy.busy() || auction.quickSelling() || lagWarning) lastActivity = ms;
 		boolean active = allowed && (expanded || ms - lastActivity <= BADGE_IDLE_MS);
 		// Stay out of the way in PvP; only the lag warning may show.
 		if (auction.inCombat() && !lagWarning) active = false;
@@ -53,8 +55,11 @@ public final class StatusHud {
 		UI.font = mc.font;
 		UI.theme = Theme.current(cfg);
 
-		String label = "Auto Auction";
-		String status = noResponse ? "Server not responding (Lag)" : auction.status();
+		// Auto Buy takes the label while it's working, or when it's the only feature running.
+		boolean showBuy = !auction.quickSelling() && !auction.busy()
+				&& (buy.busy() || (buy.isActive() && !auction.isActive()));
+		String label = showBuy ? "Auto Buy" : "Auto Auction";
+		String status = noResponse ? "Server not responding (Lag)" : showBuy ? buy.status() : auction.status();
 		int fullW = 18 + UI.width(label) + 8 + UI.width(status) + 8;
 		int w = 18 + Math.round((fullW - 18) * e);
 		// Leave room for a top-left minimap (Xaero's, JourneyMap, VoxelMap).

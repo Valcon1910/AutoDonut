@@ -60,6 +60,20 @@ public final class PriceFormat {
 		return num + suffixes[i];
 	}
 
+	private static final java.util.regex.Pattern FIRST_NUMBER =
+			java.util.regex.Pattern.compile("(\\d[\\d,]*(?:\\.\\d+)?)\\s*([kmb](?![a-z]))?");
+
+	/**
+	 * The first amount in a line of text such as "Price: $1.5K" or "$250,000 each", with an
+	 * optional k/m/b suffix. Returns -1 when the line has no valid amount.
+	 */
+	public static long parseFirst(String line) {
+		if (line == null) return -1;
+		java.util.regex.Matcher m = FIRST_NUMBER.matcher(line.toLowerCase(Locale.ROOT));
+		if (!m.find()) return -1;
+		return parse(m.group(1) + (m.group(2) == null ? "" : m.group(2)));
+	}
+
 	/** Characters allowed while typing a price. */
 	public static boolean isPriceChar(char c) {
 		return Character.isDigit(c) || c == '.' || c == ',' || c == 'k' || c == 'K' || c == 'm' || c == 'M' || c == 'b' || c == 'B';

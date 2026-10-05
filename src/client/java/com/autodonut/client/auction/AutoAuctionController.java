@@ -424,6 +424,11 @@ public final class AutoAuctionController {
 			status = "Next listing in " + seconds(nextAllowedAt - now);
 			return;
 		}
+		if (AutoBuyController.get().busy()) {
+			// Never start a listing while Auto Buy has the auction menu open.
+			status = "Waiting for Auto Buy";
+			return;
+		}
 		int scanEnd = cfg.inventoryItems == 1 ? 9 : 36;
 		// First choice: a stack that already matches a rule.
 		for (int i = 0; i < scanEnd; i++) {
@@ -819,7 +824,7 @@ public final class AutoAuctionController {
 	 * The confirming button of a dialog: the last enabled button labelled Yes / Confirm /
 	 * Sell / Accept, otherwise the last enabled button that isn't No / Cancel / Back.
 	 */
-	private static Button findConfirmButton(Screen screen) {
+	static Button findConfirmButton(Screen screen) {
 		List<Button> buttons = new ArrayList<>();
 		collectButtons(screen.children(), buttons);
 		Button labelled = null;
@@ -834,7 +839,7 @@ public final class AutoAuctionController {
 		return labelled != null ? labelled : fallback;
 	}
 
-	private static void collectButtons(List<? extends GuiEventListener> children, List<Button> out) {
+	static void collectButtons(List<? extends GuiEventListener> children, List<Button> out) {
 		for (GuiEventListener child : children) {
 			if (child instanceof Button b) {
 				if (!out.contains(b)) out.add(b);

@@ -18,6 +18,7 @@ import net.fabricmc.loader.api.FabricLoader;
 
 import com.autodonut.AutoDonut;
 import com.autodonut.client.auction.AutoAuctionController;
+import com.autodonut.client.auction.AutoBuyController;
 import com.autodonut.client.config.AutoDonutConfig;
 import com.autodonut.client.ui.AutoDonutScreen;
 import com.autodonut.client.ui.BootOverlay;
@@ -29,6 +30,7 @@ public class AutoDonutClient implements ClientModInitializer {
 	private static KeyMapping openKey;
 	private static KeyMapping quickSellKey;
 	private static KeyMapping skipKey;
+	private static KeyMapping buyPauseKey;
 	private static String version = "dev";
 
 	public static Identifier id(String path) {
@@ -47,6 +49,11 @@ public class AutoDonutClient implements ClientModInitializer {
 	/** The key bound to "continue now" (default Y). */
 	public static String skipKeyName() {
 		return skipKey == null ? "Y" : skipKey.getTranslatedKeyMessage().getString();
+	}
+
+	/** The key that pauses / resumes Auto Buy (default J). */
+	public static String buyPauseKeyName() {
+		return buyPauseKey == null ? "J" : buyPauseKey.getTranslatedKeyMessage().getString();
 	}
 
 	public static String version() {
@@ -83,6 +90,13 @@ public class AutoDonutClient implements ClientModInitializer {
 				CATEGORY
 		));
 
+		buyPauseKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+				"key.autodonut.buy_pause",
+				InputConstants.Type.KEYBOARD,
+				InputConstants.KEY_J,
+				CATEGORY
+		));
+
 		ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
 			if (screen instanceof net.minecraft.client.gui.screens.TitleScreen) TitleButton.add(client, screen, w, h);
 		});
@@ -92,17 +106,21 @@ public class AutoDonutClient implements ClientModInitializer {
 		ScreenEvents.AFTER_INIT.register((client, screen, w, h) ->
 				ScreenKeyboardEvents.afterKeyPress(screen).register((s, keyEvent) -> {
 					if (quickSellKey.matches(keyEvent) && QuickSell.allowedOn(s)) QuickSell.trigger(client);
+					// The auction menu Auto Buy opened swallows key mappings, so J is caught here too.
+					if (buyPauseKey.matches(keyEvent) && AutoBuyController.get().ownsScreen(s)) AutoBuyController.get().togglePause();
 				}));
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			Lockdown.onSystemMessage(message);
 			if (!overlay) BootOverlay.onSystemMessage(message);
 			AutoAuctionController.get().onGameMessage(message, overlay);
+			AutoBuyController.get().onGameMessage(message, overlay);
 		});
 		ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, time) -> Lockdown.onChatMessage(message));
 		ClientPlayConnectionEvents.DISCONNECT.register((listener, client) -> {
 			ServerContext.onDisconnect();
 			BootOverlay.onDisconnect();
 			AutoAuctionController.get().onDisconnect();
+			AutoBuyController.get().onDisconnect();
 		});
 		HudElementRegistry.addLast(id("status"), StatusHud::extract);
 		HudElementRegistry.addLast(id("boot"), BootOverlay::extract);
@@ -110,6 +128,7 @@ public class AutoDonutClient implements ClientModInitializer {
 			ServerContext.onJoin(client.getSingleplayerServer() != null);
 			com.autodonut.client.auction.ItemIndex.clearTags();
 			AutoAuctionController.get().onJoin();
+			AutoBuyController.get().onJoin();
 			ServerProbe.reset();
 			BootOverlay.onJoin();
 		});
@@ -127,12 +146,16 @@ public class AutoDonutClient implements ClientModInitializer {
 		while (skipKey.consumeClick()) {
 			if (client.gui.screen() == null && AutoDonutConfig.get().skipKeyEnabled) AutoAuctionController.get().skipWait();
 		}
+		while (buyPauseKey.consumeClick()) {
+			if (client.gui.screen() == null) AutoBuyController.get().togglePause();
+		}
 		QuickSell.tick(client);
 		ServerProbe.tick(client);
 		if (client.player == null && !(client.gui.screen() instanceof net.minecraft.client.gui.screens.ConnectScreen)) {
 			ServerContext.onNotInWorld();
 		}
 		AutoAuctionController.get().tick(client);
+		AutoBuyController.get().tick(client);
 		BootSequence.tick(client);
 		BootOverlay.reportFailures(client);
 	}
