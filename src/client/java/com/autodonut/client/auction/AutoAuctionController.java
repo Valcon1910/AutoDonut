@@ -55,6 +55,14 @@ public final class AutoAuctionController {
 			"too fast", "slow down", "please wait", "cooldown", "try again in", "wait before", "rate limit", "spam"
 	};
 
+	/** Server replies meaning every auction slot is in use. */
+	private static final String[] SLOT_LIMIT_WORDS = {
+			"limit", "maximum", "max ", "too many", "no more", "slots", "full"
+	};
+	/** How long Auto Auction waits for a slot when they're all taken (sales free one sooner). */
+	private static final long SLOTS_FULL_RECHECK_MS = 10 * 60_000L;
+	private long slotsFullUntil;
+
 	private enum Phase { IDLE, SPLITTING, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, HOLDING, RESTORE }
 
 	/** How long to wait for a confirmation menu after sending the sell command. */
@@ -247,6 +255,7 @@ public final class AutoAuctionController {
 		nextAllowedAt = now;
 		if (phase == Phase.REACTING || phase == Phase.SPLITTING || phase == Phase.PRE_SEND) phaseUntil = now;
 		pausedUntil = 0;
+		slotsFullUntil = 0;
 		combatUntil = 0;
 		warmupUntil = 0;
 		laggingUntil = 0;
@@ -281,6 +290,7 @@ public final class AutoAuctionController {
 		reset();
 		combatUntil = 0;
 		pausedUntil = 0;
+		slotsFullUntil = 0;
 		nextAllowedAt = 0;
 		failures.clear();
 		rulePausedUntil.clear();
@@ -359,6 +369,10 @@ public final class AutoAuctionController {
 		}
 		if (now < pausedUntil) {
 			status = "Paused for " + seconds(pausedUntil - now);
+			return;
+		}
+		if (quickRule == null && phase == Phase.IDLE && now < slotsFullUntil) {
+			status = "Auction slots full, waiting for one to free up";
 			return;
 		}
 		if (phase == Phase.AWAIT_CONFIRM) {
@@ -888,6 +902,9 @@ public final class AutoAuctionController {
 			return;
 		}
 		if (overlay) return;
+		if (slotsFullUntil != 0 && (lower.contains("sold") || lower.contains("expired") || lower.contains("bought"))) {
+			slotsFullUntil = 0;
+		}
 		if (lastCommandAt == 0 || now - lastCommandAt > 6000) return;
 		for (String w : THROTTLE_WORDS) {
 			if (lower.contains(w)) {
@@ -901,16 +918,43 @@ public final class AutoAuctionController {
 			if (rule != null) failures.remove(rule);
 			return;
 		}
-		String text = message.getString().toLowerCase(Locale.ROOT);
+		LocalPlayer player = Minecraft.getInstance().player;
+		boolean quick = quickRule != null;
+		if (isSlotLimit(lower)) {
+			lastCommandAt = 0;
+			if (rule != null) failures.remove(rule);
+			if (quick) {
+				// Quick Sell only reports it; Auto Auction keeps running.
+				if (player != null) notifyPlayer(player, "Can't auction: there are no free auction slots.");
+			} else {
+				slotsFullUntil = now + SLOTS_FULL_RECHECK_MS;
+				if (player != null) notifyPlayer(player, "All auction slots are in use, Auto Auction pauses until one frees up.");
+			}
+			reset();
+			return;
+		}
 		for (String word : REFUSAL_WORDS) {
-			if (text.contains(word)) {
-				pausedUntil = now + SERVER_REFUSAL_PAUSE_MS;
+			if (lower.contains(word)) {
 				lastCommandAt = 0;
-				LocalPlayer player = Minecraft.getInstance().player;
+				if (quick) {
+					if (player != null) notifyPlayer(player, "The server refused the Quick Sell.");
+					reset();
+					return;
+				}
+				pausedUntil = now + SERVER_REFUSAL_PAUSE_MS;
 				if (player != null) notifyPlayer(player, "The server refused a listing, pausing Auto Auction for 5 minutes.");
 				return;
 			}
 		}
+	}
+
+	private static boolean isSlotLimit(String lower) {
+		boolean aboutListings = lower.contains("listing") || lower.contains("auction") || lower.contains("slot") || lower.contains("items");
+		if (!aboutListings) return false;
+		for (String w : SLOT_LIMIT_WORDS) {
+			if (lower.contains(w)) return true;
+		}
+		return false;
 	}
 
 	private AuctionRule findRule(AutoDonutConfig cfg, ItemStack stack, long now) {
