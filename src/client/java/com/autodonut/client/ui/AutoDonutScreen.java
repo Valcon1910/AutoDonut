@@ -441,12 +441,12 @@ public class AutoDonutScreen extends Screen {
 		for (Updater.Release r : releases) {
 			if (!out.isEmpty()) out.add(new NoteLine("", 0));
 			boolean current = r.version().equals(AutoDonutClient.version());
-			out.add(new NoteLine("v" + r.version() + (current ? "  (current)" : ""), 1));
+			out.add(new NoteLine("v" + r.version(), current ? 4 : 1));
 			if (!r.date().isEmpty()) out.add(new NoteLine(r.date(), 2));
-			String body = r.changelog().isBlank() ? "No changes listed." : r.changelog();
+			String body = r.changelog();
 			for (String raw : body.split("\n")) {
 				String line = raw.strip();
-				if (line.isEmpty()) continue;
+				if (line.isEmpty() || line.matches("(?i)^[-*]\\s*bump version.*")) continue;
 				if (line.startsWith("#")) line = line.replaceFirst("^#+\\s*", "");
 				if (line.startsWith("- ") || line.startsWith("* ")) line = "\u2022 " + line.substring(2);
 				line = line.replace("**", "").replace("`", "");
@@ -1178,9 +1178,10 @@ public class AutoDonutScreen extends Screen {
 		int yy = boxTop + 6;
 		for (int i = changelogScroll; i < lines.size() && yy <= bottom - 8; i++) {
 			NoteLine l = lines.get(i);
-			if (l.kind() == 1) {
+			if (l.kind() == 1 || l.kind() == 4) {
 				ui.fill(x + 6, yy - 1, x + 8, yy + ui.lineHeight() - 1, t.accent());
 				ui.bold(l.text(), x + 12, yy, t.text());
+				if (l.kind() == 4) ui.text("(installed)", x + 18 + ui.boldWidth(l.text()), yy, t.textMuted());
 			} else {
 				ui.text(l.text(), l.kind() == 2 ? x + 12 : x + 8, yy, l.kind() == 2 ? t.textMuted() : t.text());
 			}

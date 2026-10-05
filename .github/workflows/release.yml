@@ -51,8 +51,8 @@ jobs:
           # The commits since the previous release become this version's changelog.
           prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
           range=${prev:+$prev..HEAD}
-          git log $range --no-merges --pretty='- %s' > notes.md
-          [ -s notes.md ] || echo "No changes listed." > notes.md
+          git log $range --no-merges -i --invert-grep --grep='^bump version' --pretty='- %s' > notes.md
+          touch notes.md
 
       - name: Publish
         if: steps.v.outputs.exists == 'false'

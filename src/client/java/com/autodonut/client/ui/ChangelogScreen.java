@@ -59,12 +59,12 @@ public class ChangelogScreen extends Screen {
 		for (Updater.Release r : releases) {
 			if (!out.isEmpty()) out.add(new Line("", 3));
 			boolean current = r.version().equals(AutoDonutClient.version());
-			out.add(new Line("v" + r.version() + (current ? "  (installed)" : ""), 1));
+			out.add(new Line("v" + r.version(), current ? 4 : 1));
 			if (!r.date().isEmpty()) out.add(new Line(r.date(), 2));
-			String body = r.changelog().isBlank() ? "No changes listed." : r.changelog();
+			String body = r.changelog();
 			for (String raw : body.split("\n")) {
 				String line = raw.strip();
-				if (line.isEmpty()) continue;
+				if (line.isEmpty() || line.matches("(?i)^[-*]\\s*bump version.*")) continue;
 				if (line.startsWith("#")) line = line.replaceFirst("^#+\\s*", "");
 				if (line.startsWith("- ") || line.startsWith("* ")) line = "• " + line.substring(2);
 				line = line.replace("**", "").replace("`", "");
@@ -75,7 +75,7 @@ public class ChangelogScreen extends Screen {
 	}
 
 	private int lineH(Line l) {
-		return l.kind() == 3 ? 8 : l.kind() == 1 ? 14 : 11;
+		return l.kind() == 3 ? 8 : l.kind() == 1 || l.kind() == 4 ? 14 : 11;
 	}
 
 	private int contentHeight() {
@@ -160,9 +160,10 @@ public class ChangelogScreen extends Screen {
 				int h = lineH(l);
 				if (y + h >= top && y <= bottom) {
 					switch (l.kind()) {
-						case 1 -> {
+						case 1, 4 -> {
 							ui.fill(px + 10, y, px + 12, y + 10, t.accent());
 							ui.bold(l.text(), px + 16, y + 1, t.text());
+							if (l.kind() == 4) ui.text("(installed)", px + 22 + ui.boldWidth(l.text()), y + 1, t.textMuted());
 						}
 						case 2 -> ui.text(l.text(), px + 16, y, t.textMuted());
 						case 0 -> ui.text(l.text(), px + 16, y, t.text());
