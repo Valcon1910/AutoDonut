@@ -52,7 +52,8 @@ public final class AutoBuyController {
 	private static final int MAX_PAGES = 4;
 	private static final String[] SUCCESS_WORDS = {"you bought", "you purchased", "purchased", "successfully bought"};
 	private static final String[] NO_MONEY_WORDS = {"not enough", "can't afford", "cannot afford", "insufficient", "don't have enough"};
-	private static final String[] GONE_WORDS = {"already sold", "no longer", "not available", "doesn't exist", "does not exist"};
+	private static final String[] GONE_WORDS = {"already sold", "already been sold", "already bought", "no longer", "not available", "doesn't exist",
+			"does not exist", "was sold", "been purchased", "someone else", "expired", "not found"};
 
 	private enum Phase { IDLE, OPENING, SCANNING, PAGING, AWAIT_CONFIRM, CONFIRMING, RESULT }
 
@@ -90,6 +91,8 @@ public final class AutoBuyController {
 	private boolean serverRefused;
 	/** The server said the listing was already gone. */
 	private boolean gone;
+	/** How many of the bought item were in the inventory when the listing was clicked. */
+	private int invBefore;
 	/** Paused with the pause key (rules with the key option turned on wait). */
 	private boolean keyPaused;
 	private int boughtThisSession;
@@ -485,6 +488,7 @@ public final class AutoBuyController {
 		if (best >= 0) {
 			ItemStack stack = menu.slots.get(best).getItem();
 			boughtItemId = ItemIndex.idOf(stack.getItem());
+			invBefore = inventoryCount(player, boughtItemId);
 			boughtPrice = bestPrice;
 			serverBought = false;
 			serverRefused = false;
@@ -605,9 +609,12 @@ public final class AutoBuyController {
 		if (!serverBought && !serverRefused && now < phaseUntil) return;
 		BuyRule r = rule;
 		abort(mc);
-		if (gone && !serverBought) {
-			nextCheckAt.put(r, now + humanizer.between(r.speed.minMs, r.speed.maxMs));
-			status = "Listing gone, waiting";
+		// Only a confirmed purchase counts: the server said so, or the item actually arrived. A listing
+		// someone else took first (or that vanished) is skipped and the search carries on right away.
+		boolean arrived = boughtItemId != null && inventoryCount(player, boughtItemId) > invBefore;
+		if (!serverRefused && (gone || !(serverBought || arrived))) {
+			nextCheckAt.put(r, now + humanizer.between(300, 900));
+			status = "Listing was taken, continuing";
 			return;
 		}
 		if (serverRefused) {
@@ -615,7 +622,6 @@ public final class AutoBuyController {
 			status = "Can't afford it";
 			return;
 		}
-		// Counted unless the server refused: a missed message never lets it buy past the limit.
 		r.purchases++;
 		boughtThisSession++;
 		// After a purchase: the Safety page's min/max delay, never quicker than the rule's speed.
@@ -631,6 +637,16 @@ public final class AutoBuyController {
 		} else {
 			status = "Bought for $" + PriceFormat.format(boughtPrice);
 		}
+	}
+
+	private static int inventoryCount(LocalPlayer player, String itemId) {
+		var inv = player.getInventory();
+		int n = 0;
+		for (int i = 0; i < inv.getContainerSize(); i++) {
+			ItemStack st = inv.getItem(i);
+			if (!st.isEmpty() && ItemIndex.idOf(st.getItem()).equals(itemId)) n += st.getCount();
+		}
+		return n;
 	}
 
 	/** Called for every system message, like {@link AutoAuctionController#onGameMessage}. */
@@ -649,7 +665,7 @@ public final class AutoBuyController {
 		for (String w : GONE_WORDS) {
 			if (lower.contains(w)) {
 				// Someone else was faster; nothing was bought. Ends the wait right away.
-				if (phase == Phase.AWAIT_CONFIRM || phase == Phase.RESULT) {
+				if (phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.RESULT) {
 					gone = true;
 					phaseUntil = System.currentTimeMillis();
 				}
