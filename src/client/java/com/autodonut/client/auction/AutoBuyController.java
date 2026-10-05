@@ -328,11 +328,6 @@ public final class AutoBuyController {
 		}
 		Screen open = view(mc);
 		if (phase == Phase.IDLE) {
-			if (auction.busy()) {
-				freeze(sinceLastTick);
-				status = "Waiting for Auto Auction";
-				return;
-			}
 			if (open instanceof AutoDonutScreen) {
 				freeze(sinceLastTick);
 				status = "Waits until you close AutoDonut";
@@ -394,6 +389,7 @@ public final class AutoBuyController {
 		long soonest = Long.MAX_VALUE;
 		BuyRule due = null;
 		int n = rules.size();
+		int cursorBefore = ruleCursor;
 		// Round robin so every item gets its turn.
 		for (int k = 0; k < n; k++) {
 			BuyRule r = rules.get((ruleCursor + k) % n);
@@ -416,6 +412,13 @@ public final class AutoBuyController {
 			} else {
 				status = "Paused";
 			}
+			return;
+		}
+		if (auction.busy()) {
+			// Timers keep running while Auto Auction lists; a check that comes due waits at zero
+			// until the listing is done, then goes right away.
+			ruleCursor = cursorBefore;
+			status = "Ready, waiting for Auto Auction";
 			return;
 		}
 		rule = due;

@@ -426,7 +426,7 @@ public final class AutoAuctionController {
 		}
 		if (AutoBuyController.get().busy()) {
 			// Never start a listing while Auto Buy has the auction menu open.
-			status = "Waiting for Auto Buy";
+			status = "Ready, waiting for Auto Buy";
 			return;
 		}
 		int scanEnd = cfg.inventoryItems == 1 ? 9 : 36;
