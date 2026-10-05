@@ -80,6 +80,9 @@ public final class AutoBuyController {
 	private Screen phantom;
 	/** Set when the player opened a screen of their own mid-check; the check ends next tick. */
 	private boolean playerTookOver;
+	/** Last moment the player was moving; checks only start after standing still for a moment. */
+	private long lastMovedAt;
+	private static final long STILL_MS = 600;
 	private int pages;
 	/** Whether this check's command searched for an item name (otherwise plain /ah). */
 	private boolean searched;
@@ -319,6 +322,18 @@ public final class AutoBuyController {
 			return;
 		}
 
+		// Donut closes menus when you move (and anti-cheat dislikes menu clicks while moving), so a
+		// check only runs while standing still; moving mid-check ends it and retries once you stop.
+		if (isMoving(mc, player)) lastMovedAt = now;
+		boolean still = now - lastMovedAt >= STILL_MS;
+		if (!still && phase != Phase.IDLE && phase != Phase.RESULT) {
+			BuyRule current = rule;
+			abort(mc);
+			if (current != null) nextCheckAt.put(current, now);
+			status = "Ready, waiting until you stand still";
+			return;
+		}
+
 		if (playerTookOver && phase != Phase.IDLE) {
 			BuyRule current = rule;
 			reset();
@@ -412,6 +427,12 @@ public final class AutoBuyController {
 			} else {
 				status = "Paused";
 			}
+			return;
+		}
+		if (now - lastMovedAt < STILL_MS) {
+			// Due, but the player is moving: hold at zero and go once they stand still.
+			ruleCursor = cursorBefore;
+			status = "Ready, waiting until you stand still";
 			return;
 		}
 		if (AutoAuctionController.get().busy()) {
@@ -650,6 +671,13 @@ public final class AutoBuyController {
 			if (!st.isEmpty() && ItemIndex.idOf(st.getItem()).equals(itemId)) n += st.getCount();
 		}
 		return n;
+	}
+
+	private static boolean isMoving(Minecraft mc, LocalPlayer player) {
+		var o = mc.options;
+		if (o.keyUp.isDown() || o.keyDown.isDown() || o.keyLeft.isDown() || o.keyRight.isDown() || o.keyJump.isDown()) return true;
+		var v = player.getDeltaMovement();
+		return v.x * v.x + v.z * v.z > 0.003;
 	}
 
 	/** Called for every system message, like {@link AutoAuctionController#onGameMessage}. */
