@@ -23,6 +23,10 @@ public final class TitleButton {
 	private static final Ui UI = new Ui();
 	private static final Anim HOVER = new Anim(0, 16);
 	private static long lastFrame = System.nanoTime();
+	/** When the title screen first showed this game session (-1 = not yet); drives the intro. */
+	private static long introStart = -1;
+	private static final float INTRO_DELAY_MS = 350f;
+	private static final float INTRO_MS = 650f;
 
 	private TitleButton() {
 	}
@@ -62,13 +66,25 @@ public final class TitleButton {
 		UI.alpha = 1f;
 		Theme t = UI.theme;
 
+		// Intro once per game start: the tile drops in, then the version pill slides out beside it.
+		if (introStart < 0) introStart = now;
+		float elapsed = (now - introStart) / 1_000_000f - INTRO_DELAY_MS;
+		float tileIn = Anim.easeInOut(Math.max(0f, Math.min(1f, elapsed / INTRO_MS)));
+		float pillIn = Anim.easeInOut(Math.max(0f, Math.min(1f, (elapsed - INTRO_MS * 0.45f) / INTRO_MS)));
+		if (tileIn <= 0f) return;
+
 		// Version pill
 		String version = "AutoDonut v" + AutoDonutClient.version();
 		int pw = UI.width(version) + 12;
-		int px = x - 4 - pw;
+		int px = x - 4 - pw + Math.round((1f - pillIn) * 16);
 		int pill = textHovered ? t.surfaceHover() : t.panel();
-		UI.round(px, y + 3, pw, SIZE - 6, 3, (pill & 0x00FFFFFF) | 0xE0000000);
-		UI.text(version, px + 6, y + (SIZE - 8) / 2 + 1, textHovered ? t.text() : t.textMuted());
+		UI.alpha = pillIn;
+		if (pillIn > 0.02f) {
+			UI.round(px, y + 3, pw, SIZE - 6, 3, (pill & 0x00FFFFFF) | 0xE0000000);
+			UI.text(version, px + 6, y + (SIZE - 8) / 2 + 1, textHovered ? t.text() : t.textMuted());
+		}
+		UI.alpha = tileIn;
+		y -= Math.round((1f - tileIn) * 10);
 
 		// Logo tile: lifts and gets an accent outline on hover
 		int lift = Math.round(h);
@@ -76,7 +92,10 @@ public final class TitleButton {
 		int bg = Anim.lerpColor(t.panel(), t.surfaceHover(), h);
 		UI.round(x, y - lift, SIZE, SIZE, 4, bg);
 		UI.outline(x, y - lift, SIZE, SIZE, 1, Anim.lerpColor(t.border(), t.accent(), h));
-		UI.logo(x + 3, y + 3 - lift, SIZE - 6);
+		// The logo image can't fade, so it grows in from its centre with the tile.
+		UI.alpha = 1f;
+		int size = Math.round((SIZE - 6) * tileIn);
+		if (size >= 2) UI.logo(x + SIZE / 2 - size / 2, y + SIZE / 2 - lift - size / 2, size);
 
 	}
 
