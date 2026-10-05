@@ -6,7 +6,8 @@
 		"ConnectScreenMixin",
 		"ScreenMixin",
 		"ClientPacketListenerMixin",
-		"AbstractContainerScreenAccessor"
+		"AbstractContainerScreenAccessor",
+		"GuiMixin"
 	],
 	"injectors": { "defaultRequire": 1 }
 }

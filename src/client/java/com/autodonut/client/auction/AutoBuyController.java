@@ -71,6 +71,14 @@ public final class AutoBuyController {
 	/** The auction menu Auto Buy opened, and the confirm menu it is answering. */
 	private Screen ahScreen;
 	private Screen confirmScreen;
+	/**
+	 * Menu the server opened for Auto Buy that was never shown ("phantom"): its screen was kept
+	 * from becoming current, so the player keeps moving and looking around while
+	 * {@code player.containerMenu} still receives the slots and accepts clicks.
+	 */
+	private Screen phantom;
+	/** Set when the player opened a screen of their own mid-check; the check ends next tick. */
+	private boolean playerTookOver;
 	private int pages;
 	/** Whether this check's command searched for an item name (otherwise plain /ah). */
 	private boolean searched;
@@ -111,6 +119,57 @@ public final class AutoBuyController {
 	public boolean isActive() {
 		AutoDonutConfig cfg = AutoDonutConfig.get();
 		return cfg.autoBuyEnabled && !Lockdown.active() && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
+	}
+
+	/**
+	 * The menu Auto Buy is working in: the phantom while there is one (dropped once the server
+	 * closes or replaces its menu), otherwise the current screen.
+	 */
+	private Screen view(Minecraft mc) {
+		if (phantom != null) {
+			LocalPlayer player = mc.player;
+			if (player == null || !(phantom instanceof AbstractContainerScreen<?> c) || c.getMenu() != player.containerMenu) {
+				phantom = null;
+			}
+		}
+		return phantom != null ? phantom : mc.gui.screen();
+	}
+
+	/** Whether Auto Buy has a phantom menu open right now. */
+	public boolean hasPhantom() {
+		return phantom != null;
+	}
+
+	/**
+	 * Called at the start of every set-screen (see GuiMixin). Returns true to keep the screen from
+	 * opening: a server menu Auto Buy is waiting for becomes its phantom instead. Any other screen
+	 * opening while a phantom is up means the player took over: the phantom container is closed
+	 * first, then their screen opens normally.
+	 */
+	public boolean onSetScreen(Screen screen) {
+		Minecraft mc = Minecraft.getInstance();
+		LocalPlayer player = mc.player;
+		if (screen instanceof AbstractContainerScreen<?> container && player != null && busy()
+				&& AutoDonutConfig.get().confirmInBackground
+				&& container.getMenu() == player.containerMenu && player.containerMenu != player.inventoryMenu) {
+			phantom = screen;
+			return true;
+		}
+		if (screen != null && phantom != null) {
+			playerTookOver = true;
+			closePhantom(player);
+		}
+		return false;
+	}
+
+	/** Tells the server the phantom menu is closed and forgets it. */
+	private void closePhantom(LocalPlayer player) {
+		Screen p = phantom;
+		phantom = null;
+		if (player != null && p instanceof AbstractContainerScreen<?> c && c.getMenu() == player.containerMenu
+				&& player.containerMenu != player.inventoryMenu) {
+			player.closeContainer();
+		}
 	}
 
 	/**
@@ -160,6 +219,8 @@ public final class AutoBuyController {
 	}
 
 	public void reset() {
+		closePhantom(Minecraft.getInstance().player);
+		playerTookOver = false;
 		setPhase(Phase.IDLE);
 		ahScreen = null;
 		confirmScreen = null;
@@ -187,7 +248,7 @@ public final class AutoBuyController {
 	private void abort(Minecraft mc) {
 		LocalPlayer player = mc.player;
 		Screen open = mc.gui.screen();
-		if (player != null && open != null && (open == ahScreen || open == confirmScreen)) {
+		if (player != null && open != null && phantom == null && (open == ahScreen || open == confirmScreen)) {
 			if (open instanceof AbstractContainerScreen<?>) player.closeContainer();
 			else open.onClose();
 		}
@@ -255,7 +316,14 @@ public final class AutoBuyController {
 			return;
 		}
 
-		Screen open = mc.gui.screen();
+		if (playerTookOver && phase != Phase.IDLE) {
+			BuyRule current = rule;
+			reset();
+			if (current != null) nextCheckAt.put(current, now + humanizer.between(current.speed.minMs, current.speed.maxMs));
+			status = "Stopped (you opened a menu)";
+			return;
+		}
+		Screen open = view(mc);
 		if (phase == Phase.IDLE) {
 			if (auction.busy()) {
 				freeze(sinceLastTick);
@@ -368,7 +436,7 @@ public final class AutoBuyController {
 	}
 
 	private void tickOpening(Minecraft mc, LocalPlayer player, long now) {
-		Screen open = mc.gui.screen();
+		Screen open = view(mc);
 		if (open instanceof AbstractContainerScreen<?> && player.containerMenu != player.inventoryMenu) {
 			ahScreen = open;
 			setPhase(Phase.SCANNING);
@@ -447,7 +515,7 @@ public final class AutoBuyController {
 	}
 
 	private void tickPaging(Minecraft mc, long now) {
-		Screen open = mc.gui.screen();
+		Screen open = view(mc);
 		if (open instanceof AbstractContainerScreen<?> container) {
 			// The next page may come as a new menu or as new contents of the same one.
 			boolean changed = open != ahScreen || !signature(container.getMenu()).equals(pageSignature);
@@ -472,7 +540,7 @@ public final class AutoBuyController {
 			phaseUntil = now;
 			return;
 		}
-		Screen open = mc.gui.screen();
+		Screen open = view(mc);
 		if (open != null && open != ahScreen && !(open instanceof ChatScreen) && !(open instanceof AutoDonutScreen) && looksLikeConfirm(open)) {
 			confirmScreen = open;
 			setPhase(Phase.CONFIRMING);
@@ -499,7 +567,7 @@ public final class AutoBuyController {
 
 	private void tickConfirming(Minecraft mc, LocalPlayer player, long now) {
 		if (now < phaseUntil) return;
-		Screen open = mc.gui.screen();
+		Screen open = view(mc);
 		if (open == null || open != confirmScreen) {
 			setPhase(Phase.RESULT);
 			phaseUntil = now + RESULT_WAIT_MS;
