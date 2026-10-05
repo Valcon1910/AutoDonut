@@ -419,11 +419,16 @@ public final class AutoBuyController {
 		pages = 0;
 		String command = "ah";
 		searched = false;
-		// Search only for a single plain item; several items or a #tag are found by browsing.
-		if (due.searchMode == BuyRule.SearchMode.SEARCH && due.items.size() == 1 && !due.items.get(0).startsWith("#")) {
-			ItemIndex.Entry e = ItemIndex.byId(due.items.get(0));
-			if (e != null) {
-				command = "ah " + e.name();
+		// A single plain item is looked up by name in both modes. Search adds the amount when the
+		// quantity is an exact number and only checks that first page; Browse flips through the
+		// results. Several items or a #tag can't be one search, so those browse plain /ah.
+		boolean single = due.items.size() == 1 && !due.items.get(0).startsWith("#");
+		ItemIndex.Entry e = single ? ItemIndex.byId(due.items.get(0)) : null;
+		if (e != null) {
+			command = "ah " + e.name();
+			if (due.searchMode == BuyRule.SearchMode.SEARCH) {
+				String q = due.quantity.strip();
+				if (q.matches("\\d+")) command += " " + q;
 				searched = true;
 			}
 		}
