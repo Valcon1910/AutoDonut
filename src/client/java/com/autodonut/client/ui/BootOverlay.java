@@ -66,6 +66,8 @@ public final class BootOverlay {
 		String text = message.getString().toLowerCase(Locale.ROOT);
 		// "Server restarting in 5 minutes" is a warning, not a new session.
 		if (text.contains("restarting in") || text.contains("restart in")) return;
+		// "...an area in maintenance, try again in a few minutes": the move failed, nothing restarted.
+		if (text.contains("try again") || text.contains("in maintenance")) return;
 		for (String w : SESSION_WORDS) {
 			if (text.contains(w)) {
 				start(Character.toUpperCase(w.charAt(0)) + w.substring(1));
@@ -95,7 +97,7 @@ public final class BootOverlay {
 		UI.alpha = Math.min(in, out);
 
 		int w = 170;
-		int h = 26 + total * 11;
+		int h = 36 + total * 11;
 		int x = graphics.guiWidth() / 2 - w / 2;
 		int y = 22 + Math.round((1f - in) * -8);
 		UI.round(x, y, w, h, 3, UI.theme.panel() & 0xF0FFFFFF);
@@ -107,14 +109,15 @@ public final class BootOverlay {
 		UI.logo(x + 5, y + 4, 10);
 		String dots = results.size() < total ? ".".repeat((int) ((elapsed / 300) % 4)) : "";
 		UI.text("AutoDonut Booting Up" + dots, x + 19, y + 6, UI.theme.text());
-		UI.textRight(UI.trim(reason, 60), x + w - 5, y + 6, UI.theme.textMuted());
+		// Why it's booting, on its own line so it never runs into the title.
+		UI.text(UI.trim(reason, w - 24), x + 19, y + 16, UI.theme.textMuted());
 		float base = UI.alpha;
 		for (int i = 0; i < results.size(); i++) {
 			BootSequence.Failure r = results.get(i);
 			UI.alpha = base * Anim.clamp01((elapsed - (i + 1) * STEP_MS) / 200f);
 			String line = (r == null ? "✔ " : "✘ ") + BootSequence.stepLabel(i);
-			UI.text(line, x + 8, y + 19 + i * 11, r == null ? UI.theme.textMuted() : UI.theme.danger());
-			if (r != null) UI.textRight("see chat", x + w - 5, y + 19 + i * 11, UI.WARNING);
+			UI.text(line, x + 8, y + 29 + i * 11, r == null ? UI.theme.textMuted() : UI.theme.danger());
+			if (r != null) UI.textRight("see chat", x + w - 5, y + 29 + i * 11, UI.WARNING);
 		}
 		UI.alpha = base;
 	}
