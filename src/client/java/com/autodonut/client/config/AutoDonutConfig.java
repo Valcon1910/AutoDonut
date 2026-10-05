@@ -52,6 +52,9 @@ public class AutoDonutConfig {
 	/** Ping the server every 10s (every 4s while it isn't answering) and pause when it doesn't respond. */
 	public boolean serverCheck = true;
 	public boolean streamerMode = false;
+	/** Updating: look for new releases on start, and install them without asking. */
+	public boolean checkUpdates = true;
+	public boolean autoUpdate = false;
 	/** Quick Sell: pressing R opens Donut's own sell screen for the held item. */
 	public boolean quickSellEnabled = true;
 	/** Safety lockdown: everything stays off until the player boots AutoDonut up again. */

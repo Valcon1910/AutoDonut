@@ -60,6 +60,7 @@ public class AutoDonutClient implements ClientModInitializer {
 		version = FabricLoader.getInstance().getModContainer(AutoDonut.MOD_ID)
 				.map(c -> c.getMetadata().getVersion().getFriendlyString())
 				.orElse("dev");
+		Updater.start();
 
 		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
 				"key.autodonut.open",

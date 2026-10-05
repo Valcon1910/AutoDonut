@@ -1,0 +1,63 @@
+name: Release
+
+# Builds the mod and publishes a GitHub release whenever mod_version in gradle.properties
+# changes on main. The in-game updater downloads the jar from that release, and shows the
+# matching CHANGELOG.md section as its changelog.
+on:
+  push:
+    branches: [main]
+    paths: [gradle.properties]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: v
+        run: |
+          version=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/setup-java@v4
+        if: steps.v.outputs.exists == 'false'
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Build
+        if: steps.v.outputs.exists == 'false'
+        run: |
+          chmod +x gradlew
+          ./gradlew build --no-daemon
+
+      - name: Changelog
+        if: steps.v.outputs.exists == 'false'
+        run: |
+          # The "## <version>" section of CHANGELOG.md, up to the next "## " heading.
+          awk -v v="${{ steps.v.outputs.version }}" '
+            /^## / { if (found) exit; found = ($2 == v || $2 == "v" v) ; next }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "No changelog for this version." > notes.md
+
+      - name: Publish
+        if: steps.v.outputs.exists == 'false'
+        run: |
+          jar=$(ls build/libs/*.jar | grep -v -e sources -e dev | head -n1)
+          gh release create "v${{ steps.v.outputs.version }}" "$jar" \
+            --title "AutoDonut ${{ steps.v.outputs.version }}" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
