@@ -28,6 +28,23 @@ public class ChangelogScreen extends Screen {
 	private int px, py, pw, ph;
 	private List<Line> lines = List.of();
 	private int builtFor = -1;
+	/** Versions folded down to their heading; shared with the panel's changelog. */
+	public static final java.util.Set<String> COLLAPSED = new java.util.HashSet<>();
+	/** Heading hit boxes from the last frame: {y, height} per version. */
+	private final java.util.Map<String, int[]> headingHits = new java.util.HashMap<>();
+
+	/** Small arrow: pointing down when open, right when collapsed. */
+	public static void arrow(Ui ui, int x, int y, boolean open, int color) {
+		if (open) {
+			ui.fill(x, y + 1, x + 5, y + 2, color);
+			ui.fill(x + 1, y + 2, x + 4, y + 3, color);
+			ui.fill(x + 2, y + 3, x + 3, y + 4, color);
+		} else {
+			ui.fill(x + 1, y, x + 2, y + 5, color);
+			ui.fill(x + 2, y + 1, x + 3, y + 4, color);
+			ui.fill(x + 3, y + 2, x + 4, y + 3, color);
+		}
+	}
 
 	/** kind: 0 = text, 1 = version heading, 2 = muted note, 3 = gap. */
 	private record Line(String text, int kind) { }
@@ -52,14 +69,16 @@ public class ChangelogScreen extends Screen {
 
 	private void buildLines() {
 		List<Updater.Release> releases = Updater.releases();
-		if (builtFor == releases.size()) return;
-		builtFor = releases.size();
+		int key = releases.size() * 31 + COLLAPSED.hashCode();
+		if (builtFor == key) return;
+		builtFor = key;
 		List<Line> out = new ArrayList<>();
 		int w = pw - 28;
 		for (Updater.Release r : releases) {
 			if (!out.isEmpty()) out.add(new Line("", 3));
 			boolean current = r.version().equals(AutoDonutClient.version());
 			out.add(new Line("v" + r.version(), current ? 4 : 1));
+			if (COLLAPSED.contains(r.version())) continue;
 			if (!r.date().isEmpty()) out.add(new Line(r.date(), 2));
 			String body = r.changelog();
 			for (String raw : body.split("\n")) {
@@ -155,14 +174,18 @@ public class ChangelogScreen extends Screen {
 			scroll.set(scrollTarget);
 			int off = Math.round(scroll.update(ui.dt));
 			ui.scissor(px + 1, top, px + pw - 1, bottom);
+			headingHits.clear();
 			int y = top + 2 - off;
 			for (Line l : lines) {
 				int h = lineH(l);
 				if (y + h >= top && y <= bottom) {
 					switch (l.kind()) {
 						case 1, 4 -> {
-							ui.fill(px + 10, y, px + 12, y + 10, t.accent());
-							ui.bold(l.text(), px + 16, y + 1, t.text());
+							String ver = l.text().substring(1);
+							headingHits.put(ver, new int[] {y, h});
+							boolean over = mouseY >= y && mouseY < y + h && mouseX >= px && mouseX < px + pw && mouseY >= top && mouseY < bottom;
+							arrow(ui, px + 9, y + 3, !COLLAPSED.contains(ver), over ? t.text() : t.accent());
+							ui.bold(l.text(), px + 16, y + 1, over ? t.accent() : t.text());
 							if (l.kind() == 4) ui.text("(installed)", px + 22 + ui.boldWidth(l.text()), y + 1, t.textMuted());
 						}
 						case 2 -> ui.text(l.text(), px + 16, y, t.textMuted());
@@ -199,6 +222,15 @@ public class ChangelogScreen extends Screen {
 		if (inClose || outside) {
 			onClose();
 			return true;
+		}
+		if (my >= py + HEADER + 6 && my < py + ph - 6) {
+			for (var e : headingHits.entrySet()) {
+				if (my >= e.getValue()[0] && my < e.getValue()[0] + e.getValue()[1]) {
+					if (!COLLAPSED.remove(e.getKey())) COLLAPSED.add(e.getKey());
+					UiSounds.click();
+					return true;
+				}
+			}
 		}
 		return true;
 	}

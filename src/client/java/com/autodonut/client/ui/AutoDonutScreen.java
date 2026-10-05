@@ -74,6 +74,9 @@ public class AutoDonutScreen extends Screen {
 	private Updater.State lastUpdaterState;
 	/** Updating page: the version whose changelog is shown, its scroll, and where the text area starts. */
 	private int changelogScroll;
+	/** Changelog headings drawn last frame (version -> y), for collapsing on click. */
+	private final java.util.Map<String, Integer> noteHeadings = new java.util.HashMap<>();
+	private int noteLineH, noteBottom;
 	private int changelogTop;
 	/** One line of a changelog box: 0 = text, 1 = version heading, 2 = muted note. */
 	private record NoteLine(String text, int kind) { }
@@ -442,6 +445,7 @@ public class AutoDonutScreen extends Screen {
 			if (!out.isEmpty()) out.add(new NoteLine("", 0));
 			boolean current = r.version().equals(AutoDonutClient.version());
 			out.add(new NoteLine("v" + r.version(), current ? 4 : 1));
+			if (ChangelogScreen.COLLAPSED.contains(r.version())) continue;
 			if (!r.date().isEmpty()) out.add(new NoteLine(r.date(), 2));
 			String body = r.changelog();
 			for (String raw : body.split("\n")) {
@@ -1175,12 +1179,18 @@ public class AutoDonutScreen extends Screen {
 		int visible = (bottom - boxTop - 12) / lh;
 		changelogScroll = Math.max(0, Math.min(changelogScroll, Math.max(0, lines.size() - visible)));
 		ui.scissor(x, boxTop + 4, x + w, bottom - 4);
+		noteHeadings.clear();
+		noteLineH = lh;
+		noteBottom = bottom;
 		int yy = boxTop + 6;
 		for (int i = changelogScroll; i < lines.size() && yy <= bottom - 8; i++) {
 			NoteLine l = lines.get(i);
 			if (l.kind() == 1 || l.kind() == 4) {
-				ui.fill(x + 6, yy - 1, x + 8, yy + ui.lineHeight() - 1, t.accent());
-				ui.bold(l.text(), x + 12, yy, t.text());
+				String ver = l.text().substring(1);
+				noteHeadings.put(ver, yy);
+				boolean over = lastMouseY >= yy - 1 && lastMouseY < yy - 1 + lh && lastMouseX >= x && lastMouseX < x + w;
+				ChangelogScreen.arrow(ui, x + 5, yy + 1, !ChangelogScreen.COLLAPSED.contains(ver), over ? t.text() : t.accent());
+				ui.bold(l.text(), x + 12, yy, over ? t.accent() : t.text());
 				if (l.kind() == 4) ui.text("(installed)", x + 18 + ui.boldWidth(l.text()), yy, t.textMuted());
 			} else {
 				ui.text(l.text(), l.kind() == 2 ? x + 12 : x + 8, yy, l.kind() == 2 ? t.textMuted() : t.text());
@@ -1432,6 +1442,17 @@ public class AutoDonutScreen extends Screen {
 					selectItem(results.get(idx));
 				}
 				return true;
+			}
+		}
+
+		// Changelog headings fold their version open or closed
+		if ((page == Page.CHANGELOG || page == Page.UPDATING) && my >= changelogTop && my < noteBottom) {
+			for (var e : noteHeadings.entrySet()) {
+				if (my >= e.getValue() - 1 && my < e.getValue() - 1 + noteLineH) {
+					if (!ChangelogScreen.COLLAPSED.remove(e.getKey())) ChangelogScreen.COLLAPSED.add(e.getKey());
+					UiSounds.click();
+					return true;
+				}
 			}
 		}
 
