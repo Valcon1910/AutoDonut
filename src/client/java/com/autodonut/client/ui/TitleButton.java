@@ -30,16 +30,25 @@ public final class TitleButton {
 	public static void add(Minecraft client, Screen screen, int width, int height) {
 		int x = width - SIZE - 4;
 		int y = 4; // top-right corner
-		Screens.getWidgets(screen).add(new HitArea(x, y, () -> {
+		Screens.getWidgets(screen).add(new HitArea(x, y, SIZE, SIZE, () -> {
 			UiSounds.click();
 			client.gui.setScreen(new AutoDonutScreen(screen));
 		}));
+		// The "AutoDonut vX" text opens the changelog window.
+		int pw = client.font.width("AutoDonut v" + AutoDonutClient.version()) + 12;
+		int px = x - 4 - pw;
+		Screens.getWidgets(screen).add(new HitArea(px, y + 3, pw, SIZE - 6, () -> {
+			UiSounds.click();
+			client.gui.setScreen(new ChangelogScreen(screen));
+		}));
 
-		ScreenEvents.afterExtract(screen).register((s, graphics, mouseX, mouseY, delta) ->
-				draw(client, graphics, x, y, mouseX >= x && mouseX < x + SIZE && mouseY >= y && mouseY < y + SIZE));
+		ScreenEvents.afterExtract(screen).register((s, graphics, mouseX, mouseY, delta) -> {
+			draw(client, graphics, x, y, mouseX >= x && mouseX < x + SIZE && mouseY >= y && mouseY < y + SIZE,
+					mouseX >= px && mouseX < px + pw && mouseY >= y + 3 && mouseY < y + SIZE - 3);
+		});
 	}
 
-	private static void draw(Minecraft client, GuiGraphicsExtractor graphics, int x, int y, boolean hovered) {
+	private static void draw(Minecraft client, GuiGraphicsExtractor graphics, int x, int y, boolean hovered, boolean textHovered) {
 		long now = System.nanoTime();
 		UI.dt = Math.min(0.1f, (now - lastFrame) / 1_000_000_000f);
 		lastFrame = now;
@@ -57,8 +66,9 @@ public final class TitleButton {
 		String version = "AutoDonut v" + AutoDonutClient.version();
 		int pw = UI.width(version) + 12;
 		int px = x - 4 - pw;
-		UI.round(px, y + 3, pw, SIZE - 6, 3, (t.panel() & 0x00FFFFFF) | 0xE0000000);
-		UI.text(version, px + 6, y + (SIZE - 8) / 2 + 1, t.textMuted());
+		int pill = textHovered ? t.surfaceHover() : t.panel();
+		UI.round(px, y + 3, pw, SIZE - 6, 3, (pill & 0x00FFFFFF) | 0xE0000000);
+		UI.text(version, px + 6, y + (SIZE - 8) / 2 + 1, textHovered ? t.text() : t.textMuted());
 
 		// Logo tile: lifts and gets an accent outline on hover
 		int lift = Math.round(h);
@@ -74,8 +84,8 @@ public final class TitleButton {
 	private static final class HitArea extends AbstractButton {
 		private final Runnable action;
 
-		HitArea(int x, int y, Runnable action) {
-			super(x, y, SIZE, SIZE, Component.literal("AutoDonut"));
+		HitArea(int x, int y, int w, int h, Runnable action) {
+			super(x, y, w, h, Component.literal("AutoDonut"));
 			this.action = action;
 			super.setAlpha(0f);
 		}
