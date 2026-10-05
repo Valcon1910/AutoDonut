@@ -147,20 +147,28 @@ public class AutoDonutClient implements ClientModInitializer {
 		});
 	}
 
+	/** Last tick a screen (chat, a menu...) was open; keys typed there must not fire once it closes. */
+	private long lastScreenAt;
+
 	private void onTick(Minecraft client) {
+		long now = System.currentTimeMillis();
+		if (client.gui.screen() != null) lastScreenAt = now;
+		// A key typed in chat can reach the key mappings once chat closes (Enter sends and closes
+		// in the same moment), so presses right after a screen was open are ignored.
+		boolean free = client.gui.screen() == null && now - lastScreenAt > 200;
 		while (openKey.consumeClick()) {
-			if (client.gui.screen() == null) {
+			if (free) {
 				client.gui.setScreen(new AutoDonutScreen());
 			}
 		}
 		while (quickSellKey.consumeClick()) {
-			if (client.gui.screen() == null) QuickSell.trigger(client);
+			if (free) QuickSell.trigger(client);
 		}
 		while (skipKey.consumeClick()) {
-			if (client.gui.screen() == null && AutoDonutConfig.get().skipKeyEnabled) AutoAuctionController.get().skipWait();
+			if (free && AutoDonutConfig.get().skipKeyEnabled) AutoAuctionController.get().skipWait();
 		}
 		while (buyPauseKey.consumeClick()) {
-			if (client.gui.screen() == null) AutoBuyController.get().togglePause();
+			if (free) AutoBuyController.get().togglePause();
 		}
 		QuickSell.tick(client);
 		ServerProbe.tick(client);
