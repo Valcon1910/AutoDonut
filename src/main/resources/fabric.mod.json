@@ -8,7 +8,7 @@
 	"contact": {
 		"sources": "https://github.com/Valcon1910/AutoDonut"
 	},
-	"license": "MIT",
+	"license": "All-Rights-Reserved",
 	"icon": "assets/autodonut/icon.png",
 	"environment": "*",
 	"entrypoints": {
