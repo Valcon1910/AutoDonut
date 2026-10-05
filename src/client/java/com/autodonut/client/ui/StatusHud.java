@@ -38,6 +38,10 @@ public final class StatusHud {
 		long ms = System.currentTimeMillis();
 		if (expanded || auction.busy() || auction.quickSelling() || auction.lagging() || noResponse) lastActivity = ms;
 		if (!expanded && ms - lastActivity > BADGE_IDLE_MS) active = false;
+		// Stay out of the way in PvP; only the lag warning may show.
+		boolean lagWarning = auction.lagging() || noResponse;
+		if (auction.inCombat() && !lagWarning) active = false;
+		expanded = expanded && active;
 		VISIBLE.set(active ? 1 : 0);
 		EXPANDED.set(expanded ? 1 : 0);
 		float v = VISIBLE.update(UI.dt);
