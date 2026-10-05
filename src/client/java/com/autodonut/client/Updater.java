@@ -98,7 +98,8 @@ public final class Updater {
 				state = newest == null ? State.UP_TO_DATE : State.AVAILABLE;
 				if (newest != null && AutoDonutConfig.get().autoUpdate) install();
 			} catch (Exception e) {
-				error = "Couldn't reach GitHub";
+				error = e instanceof IOException && e.getMessage() != null && e.getMessage().startsWith("HTTP")
+						? "Update check failed (" + e.getMessage() + ")" : "Couldn't reach GitHub";
 				state = State.FAILED;
 				AutoDonut.LOGGER.warn("[AutoDonut] Update check failed: {}", e.toString());
 			}
@@ -114,6 +115,8 @@ public final class Updater {
 				.timeout(Duration.ofSeconds(15))
 				.build();
 		HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+		// 404: no releases published yet (or the repository isn't public), so nothing to update to.
+		if (res.statusCode() == 404) return new ArrayList<>();
 		if (res.statusCode() != 200) throw new IOException("HTTP " + res.statusCode());
 		JsonArray arr = JsonParser.parseString(res.body()).getAsJsonArray();
 		List<Release> out = new ArrayList<>();
