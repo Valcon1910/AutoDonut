@@ -372,7 +372,7 @@ public final class AutoAuctionController {
 			return;
 		}
 		if (quickRule == null && phase == Phase.IDLE && now < slotsFullUntil) {
-			status = "Auction slots full, waiting for one to free up";
+			status = "No auction slots";
 			return;
 		}
 		if (phase == Phase.AWAIT_CONFIRM) {
