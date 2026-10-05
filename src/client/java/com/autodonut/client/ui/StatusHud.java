@@ -14,6 +14,9 @@ public final class StatusHud {
 	private static final Anim VISIBLE = new Anim(0, 8);
 	private static final Anim EXPANDED = new Anim(0, 10);
 	private static long lastFrame = System.nanoTime();
+	/** The folded badge hides after this long without anything happening. */
+	private static final long BADGE_IDLE_MS = 10_000;
+	private static long lastActivity = System.currentTimeMillis();
 
 	private StatusHud() {
 	}
@@ -32,6 +35,9 @@ public final class StatusHud {
 				&& (auction.isActive() || auction.quickSelling() || auction.lagging() || noResponse) && mc.player != null;
 		// With a screen open (inventory, chat, ...) the label folds down to just the logo badge.
 		boolean expanded = active && mc.gui.screen() == null;
+		long ms = System.currentTimeMillis();
+		if (expanded || auction.busy() || auction.quickSelling() || auction.lagging() || noResponse) lastActivity = ms;
+		if (!expanded && ms - lastActivity > BADGE_IDLE_MS) active = false;
 		VISIBLE.set(active ? 1 : 0);
 		EXPANDED.set(expanded ? 1 : 0);
 		float v = VISIBLE.update(UI.dt);
