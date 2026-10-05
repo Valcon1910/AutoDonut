@@ -33,6 +33,17 @@ public class AutoDonutClient implements ClientModInitializer {
 	private static KeyMapping buyPauseKey;
 	private static String version = "dev";
 
+	/** True while a text box inside this screen has keyboard focus. */
+	private static boolean isTyping(net.minecraft.client.gui.components.events.ContainerEventHandler parent) {
+		var focused = parent.getFocused();
+		for (int depth = 0; depth < 6 && focused != null; depth++) {
+			if (focused instanceof net.minecraft.client.gui.components.EditBox box) return box.isFocused();
+			if (!(focused instanceof net.minecraft.client.gui.components.events.ContainerEventHandler inner)) return false;
+			focused = inner.getFocused();
+		}
+		return false;
+	}
+
 	public static Identifier id(String path) {
 		return Identifier.fromNamespaceAndPath(AutoDonut.MOD_ID, path);
 	}
@@ -105,6 +116,8 @@ public class AutoDonutClient implements ClientModInitializer {
 		// Inside inventories key mappings don't fire, so listen for R on every screen.
 		ScreenEvents.AFTER_INIT.register((client, screen, w, h) ->
 				ScreenKeyboardEvents.afterKeyPress(screen).register((s, keyEvent) -> {
+					// Typing into a text box (creative / recipe search, anvil, sign...) never triggers R or J.
+					if (isTyping(s)) return;
 					if (quickSellKey.matches(keyEvent) && QuickSell.allowedOn(s)) QuickSell.trigger(client);
 					// The auction menu Auto Buy opened swallows key mappings, so J is caught here too.
 					if (buyPauseKey.matches(keyEvent) && AutoBuyController.get().ownsScreen(s)) AutoBuyController.get().togglePause();
