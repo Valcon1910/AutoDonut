@@ -699,7 +699,7 @@ public class AutoDonutScreen extends Screen {
 			row.bounds(x, ry, w, SAFETY_ROW_H);
 			widgets.add(row);
 			editorMoving.put(row, ry);
-			if (i == 3) {
+			if (i == 1) {
 				// "Purchase limit" only shows while "Pause after purchases" is on.
 				limitRowWidget = row;
 				limitRowBase = ry;

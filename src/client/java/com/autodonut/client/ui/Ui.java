@@ -176,18 +176,60 @@ public final class Ui {
 		if (tex != null) g.blit(RenderPipelines.GUI_TEXTURED, tex, x, y, 0, 0, 16, 16, 16, 16, 16, 16);
 	}
 
+	/**
+	 * Flat texture for an item id without item data: its item texture, else the texture its item or
+	 * block model uses (following parents), e.g. command_block -> block/command_block_front.
+	 */
 	private static Identifier flatIcon(String id) {
-		{
-			int c = id.indexOf(':');
-			String ns = c < 0 ? "minecraft" : id.substring(0, c);
-			String path = id.substring(c + 1);
-			var rm = net.minecraft.client.Minecraft.getInstance().getResourceManager();
-			for (String dir : new String[] {"textures/item/", "textures/block/"}) {
-				Identifier cand = Identifier.fromNamespaceAndPath(ns, dir + path + ".png");
+		int c = id.indexOf(':');
+		String ns = c < 0 ? "minecraft" : id.substring(0, c);
+		String path = id.substring(c + 1);
+		var rm = net.minecraft.client.Minecraft.getInstance().getResourceManager();
+		Identifier direct = Identifier.fromNamespaceAndPath(ns, "textures/item/" + path + ".png");
+		if (rm.getResource(direct).isPresent()) return direct;
+		for (String model : new String[] {"item/" + path, "block/" + path}) {
+			String tex = modelTexture(rm, ns + ":" + model);
+			if (tex != null) {
+				int tc = tex.indexOf(':');
+				Identifier cand = Identifier.fromNamespaceAndPath(tc < 0 ? "minecraft" : tex.substring(0, tc),
+						"textures/" + tex.substring(tc + 1) + ".png");
 				if (rm.getResource(cand).isPresent()) return cand;
 			}
-			return null;
 		}
+		Identifier block = Identifier.fromNamespaceAndPath(ns, "textures/block/" + path + ".png");
+		return rm.getResource(block).isPresent() ? block : null;
+	}
+
+	private static final String[] TEXTURE_KEYS = {"layer0", "all", "front", "side", "end", "top", "texture", "cross", "plant", "particle"};
+
+	/** The most icon-like texture ("block/stone") of a model, following its parents; null if none. */
+	private static String modelTexture(net.minecraft.server.packs.resources.ResourceManager rm, String model) {
+		java.util.Map<String, String> textures = new java.util.HashMap<>();
+		String current = model;
+		for (int depth = 0; depth < 6 && current != null; depth++) {
+			int c = current.indexOf(':');
+			String ns = c < 0 ? "minecraft" : current.substring(0, c);
+			String path = current.substring(c + 1);
+			var res = rm.getResource(Identifier.fromNamespaceAndPath(ns, "models/" + path + ".json"));
+			if (res.isEmpty()) break;
+			try (var reader = res.get().openAsReader()) {
+				var json = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+				if (json.has("textures")) {
+					for (var e : json.getAsJsonObject("textures").entrySet()) {
+						if (e.getValue().isJsonPrimitive()) textures.putIfAbsent(e.getKey(), e.getValue().getAsString());
+					}
+				}
+				current = json.has("parent") ? json.get("parent").getAsString() : null;
+			} catch (Exception e) {
+				break;
+			}
+		}
+		for (String key : TEXTURE_KEYS) {
+			String v = textures.get(key);
+			for (int i = 0; i < 4 && v != null && v.startsWith("#"); i++) v = textures.get(v.substring(1));
+			if (v != null && !v.startsWith("#")) return v;
+		}
+		return null;
 	}
 
 	/** Greedy word wrap. */
