@@ -38,6 +38,9 @@ public final class BootSequence {
 			}),
 			new Step("Preparing Auto Auction", () -> {
 				AutoAuctionController.get().onDisconnect();
+				return null;
+			}),
+			new Step("Preparing Auto Buy", () -> {
 				com.autodonut.client.auction.AutoBuyController.get().onDisconnect();
 				return null;
 			}),
@@ -84,6 +87,7 @@ public final class BootSequence {
 			case "Loading settings" -> "Loaded settings";
 			case "Connecting features" -> "Connected features";
 			case "Preparing Auto Auction" -> "Prepared Auto Auction";
+			case "Preparing Auto Buy" -> "Prepared Auto Buy";
 			case "Safety checks" -> "Checked safety";
 			default -> STEPS.get(i).label();
 		};
