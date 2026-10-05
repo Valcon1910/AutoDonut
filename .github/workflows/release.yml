@@ -1,8 +1,8 @@
 name: Release
 
 # Builds the mod and publishes a GitHub release whenever mod_version in gradle.properties
-# changes on main. The in-game updater downloads the jar from that release, and shows the
-# matching CHANGELOG.md section as its changelog.
+# changes on main. The in-game updater downloads the jar from that release and shows its
+# notes (the commit messages since the previous release) as the changelog.
 on:
   push:
     branches: [main]
@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Read version
         id: v
@@ -46,12 +48,11 @@ jobs:
       - name: Changelog
         if: steps.v.outputs.exists == 'false'
         run: |
-          # The "## <version>" section of CHANGELOG.md, up to the next "## " heading.
-          awk -v v="${{ steps.v.outputs.version }}" '
-            /^## / { if (found) exit; found = ($2 == v || $2 == "v" v) ; next }
-            found { print }
-          ' CHANGELOG.md > notes.md
-          [ -s notes.md ] || echo "No changelog for this version." > notes.md
+          # The commits since the previous release become this version's changelog.
+          prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          range=${prev:+$prev..HEAD}
+          git log $range --no-merges --pretty='- %s' > notes.md
+          [ -s notes.md ] || echo "No changes listed." > notes.md
 
       - name: Publish
         if: steps.v.outputs.exists == 'false'

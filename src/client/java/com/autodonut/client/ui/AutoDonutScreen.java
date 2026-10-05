@@ -38,10 +38,11 @@ import com.autodonut.client.ui.widget.ThemeSwitch;
 import com.autodonut.client.ui.widget.ToggleSwitch;
 import com.autodonut.client.ui.widget.UiButton;
 import com.autodonut.client.ui.widget.Widget;
+import com.autodonut.client.Updater;
 
 /** The AutoDonut control panel, opened with K. Fully custom drawn with animated transitions. */
 public class AutoDonutScreen extends Screen {
-	private enum Page { HOME, AUCTION, SAFETY, APPEARANCE, UPDATING, EDIT }
+	private enum Page { HOME, AUCTION, SAFETY, APPEARANCE, CHANGELOG, UPDATING, EDIT }
 
 	private static final float OPEN_MS = 220f;
 	private static final float CLOSE_MS = 160f;
@@ -60,6 +61,7 @@ public class AutoDonutScreen extends Screen {
 			new NavEntry("System", null),
 			new NavEntry("Safety", Page.SAFETY),
 			new NavEntry("Appearance", Page.APPEARANCE),
+			new NavEntry("Changelog", Page.CHANGELOG),
 			new NavEntry("Updating", Page.UPDATING),
 	};
 
@@ -69,11 +71,12 @@ public class AutoDonutScreen extends Screen {
 	private Theme themeFrom;
 	private Theme themeTo;
 	private boolean rebuildPending;
-	private com.autodonut.client.Updater.State lastUpdaterState;
+	private Updater.State lastUpdaterState;
 	/** Updating page: the version whose changelog is shown, its scroll, and where the text area starts. */
-	private String changelogVersion;
 	private int changelogScroll;
 	private int changelogTop;
+	/** One line of a changelog box: 0 = text, 1 = version heading, 2 = muted note. */
+	private record NoteLine(String text, int kind) { }
 	/** 0 = Exactly (no range row), 1 = Custom (range slider row shown). Drives the editor's layout shift. */
 	private final Anim customRow = new Anim(0, 14);
 	private int hoveredResult = -1;
@@ -219,11 +222,11 @@ public class AutoDonutScreen extends Screen {
 		});
 		theme.bounds(closeX() - 8 - 34, py + (TOP - 16) / 2, 34, 16);
 		chrome.add(theme);
-		if (com.autodonut.client.Updater.updateAvailable()) {
+		if (Updater.updateAvailable()) {
 			String label = updateButtonLabel();
 			UiButton update = new UiButton(label, UiButton.Style.PRIMARY, () -> {
-				if (com.autodonut.client.Updater.state() == com.autodonut.client.Updater.State.AVAILABLE) {
-					com.autodonut.client.Updater.install();
+				if (Updater.state() == Updater.State.AVAILABLE) {
+					Updater.install();
 				}
 				setPage(Page.UPDATING);
 			});
@@ -233,7 +236,7 @@ public class AutoDonutScreen extends Screen {
 	}
 
 	private String updateButtonLabel() {
-		return switch (com.autodonut.client.Updater.state()) {
+		return switch (Updater.state()) {
 			case DOWNLOADING -> "Updating...";
 			case READY -> "Restart to update";
 			default -> "Update";
@@ -396,26 +399,25 @@ public class AutoDonutScreen extends Screen {
 			}
 			case APPEARANCE -> buildAppearance(x, w, top);
 			case UPDATING -> buildUpdating(x, w, top);
+			case CHANGELOG -> changelogScroll = 0;
 			case EDIT -> buildEditor(x, w, top);
 		}
 	}
 
 	private void buildUpdating(int x, int w, int top) {
-		var state = com.autodonut.client.Updater.state();
+		var state = Updater.state();
 		String action = switch (state) {
-			case AVAILABLE -> "Update to v" + com.autodonut.client.Updater.latest().version();
-			case DOWNLOADING -> null;
-			case READY -> null;
-			case CHECKING -> null;
+			case AVAILABLE -> "Update to v" + Updater.latest().version();
+			case DOWNLOADING, READY, CHECKING -> null;
 			default -> "Check for updates";
 		};
 		if (action != null) {
 			int bw = UiButton.widthFor(ui, action);
-			widgets.add(new UiButton(action, state == com.autodonut.client.Updater.State.AVAILABLE ? UiButton.Style.PRIMARY : UiButton.Style.SECONDARY, () -> {
-				if (com.autodonut.client.Updater.state() == com.autodonut.client.Updater.State.AVAILABLE) {
-					com.autodonut.client.Updater.install();
+			widgets.add(new UiButton(action, state == Updater.State.AVAILABLE ? UiButton.Style.PRIMARY : UiButton.Style.SECONDARY, () -> {
+				if (Updater.state() == Updater.State.AVAILABLE) {
+					Updater.install();
 				} else {
-					com.autodonut.client.Updater.check();
+					Updater.check();
 				}
 			}).bounds(x + w - bw - 8, top + 12, bw, 18));
 		}
@@ -425,57 +427,50 @@ public class AutoDonutScreen extends Screen {
 		SettingRow auto = new SettingRow("Auto update", "Download new versions by itself; they apply on the next restart",
 				toggle(() -> cfg.autoUpdate, v -> {
 					cfg.autoUpdate = v;
-					if (v && com.autodonut.client.Updater.state() == com.autodonut.client.Updater.State.AVAILABLE) {
-						com.autodonut.client.Updater.install();
-					}
+					if (v && Updater.state() == Updater.State.AVAILABLE) Updater.install();
 				}), ToggleSwitch.WIDTH);
 		auto.bounds(x, top + 50 + SAFETY_ROW_H + SAFETY_GAP, w, SAFETY_ROW_H);
 		widgets.add(check);
 		widgets.add(auto);
-
-		// Changelog: one chip per version (newest first), then the selected version's notes.
-		List<com.autodonut.client.Updater.Release> releases = com.autodonut.client.Updater.releases();
-		if (changelogVersion == null && !releases.isEmpty()) changelogVersion = releases.get(0).version();
-		int cy = top + 50 + 2 * (SAFETY_ROW_H + SAFETY_GAP) + 16;
-		int cx = x;
-		for (com.autodonut.client.Updater.Release r : releases) {
-			String label = "v" + r.version();
-			int bw = UiButton.widthFor(ui, label);
-			if (cx + bw > x + w) break;
-			boolean selected = r.version().equals(changelogVersion);
-			widgets.add(new UiButton(label, selected ? UiButton.Style.PRIMARY : UiButton.Style.SECONDARY, () -> {
-				changelogVersion = r.version();
-				changelogScroll = 0;
-				rebuildPending = true;
-			}).bounds(cx, cy, bw, 16));
-			cx += bw + 4;
-		}
-		changelogTop = cy + 22;
+		changelogTop = top + 50 + 2 * (SAFETY_ROW_H + SAFETY_GAP) + 16;
 	}
 
-	private com.autodonut.client.Updater.Release selectedRelease() {
-		for (com.autodonut.client.Updater.Release r : com.autodonut.client.Updater.releases()) {
-			if (r.version().equals(changelogVersion)) return r;
-		}
-		return null;
-	}
-
-	/** Changelog text as wrapped lines, with markdown bullets and headings tidied up. */
-	private List<String> changelogLines(int w) {
-		com.autodonut.client.Updater.Release r = selectedRelease();
-		List<String> out = new ArrayList<>();
-		if (r == null) return out;
-		String body = r.changelog().isBlank() ? "No changelog for this version." : r.changelog();
-		for (String raw : body.split("\n")) {
-			String line = raw.strip();
-			if (line.startsWith("#")) line = line.replaceFirst("^#+\\s*", "");
-			if (line.startsWith("- ") || line.startsWith("* ")) line = "\u2022 " + line.substring(2);
-			line = line.replace("**", "").replace("`", "");
-			if (line.isEmpty()) {
-				out.add("");
-				continue;
+	/** Wrapped changelog lines for the given releases, each under its own version heading. */
+	private List<NoteLine> noteLines(List<Updater.Release> releases, int w) {
+		List<NoteLine> out = new ArrayList<>();
+		for (Updater.Release r : releases) {
+			if (!out.isEmpty()) out.add(new NoteLine("", 0));
+			boolean current = r.version().equals(AutoDonutClient.version());
+			out.add(new NoteLine("v" + r.version() + (current ? "  (current)" : ""), 1));
+			if (!r.date().isEmpty()) out.add(new NoteLine(r.date(), 2));
+			String body = r.changelog().isBlank() ? "No changes listed." : r.changelog();
+			for (String raw : body.split("\n")) {
+				String line = raw.strip();
+				if (line.isEmpty()) continue;
+				if (line.startsWith("#")) line = line.replaceFirst("^#+\\s*", "");
+				if (line.startsWith("- ") || line.startsWith("* ")) line = "\u2022 " + line.substring(2);
+				line = line.replace("**", "").replace("`", "");
+				for (String l : ui.wrap(line, w)) out.add(new NoteLine(l, 0));
 			}
-			out.addAll(ui.wrap(line, w));
+		}
+		return out;
+	}
+
+	/** The installed version and every older one, newest first (all of them if the current isn't listed). */
+	private List<Updater.Release> installedAndOlder() {
+		List<Updater.Release> all = Updater.releases();
+		List<Updater.Release> out = new ArrayList<>();
+		for (Updater.Release r : all) {
+			if (Updater.compare(r.version(), AutoDonutClient.version()) <= 0) out.add(r);
+		}
+		return out.isEmpty() ? all : out;
+	}
+
+	/** Releases newer than the installed version, oldest first. */
+	private List<Updater.Release> upcoming() {
+		List<Updater.Release> out = new ArrayList<>();
+		for (Updater.Release r : Updater.releases()) {
+			if (Updater.compare(r.version(), AutoDonutClient.version()) > 0) out.add(0, r);
 		}
 		return out;
 	}
@@ -710,7 +705,7 @@ public class AutoDonutScreen extends Screen {
 			lastOffline = offlineNow;
 			if (page == Page.HOME) rebuildPending = true;
 		}
-		com.autodonut.client.Updater.State us = com.autodonut.client.Updater.state();
+		Updater.State us = Updater.state();
 		if (us != lastUpdaterState) {
 			lastUpdaterState = us;
 			buildChrome();
@@ -836,10 +831,11 @@ public class AutoDonutScreen extends Screen {
 		ui.bold("Auto", px + 31, by - 4, t.text());
 		ui.bold("Donut", px + 31 + ui.boldWidth("Auto"), by - 4, t.accent());
 		int vx = versionX();
-		if (com.autodonut.client.Updater.updateAvailable()) vx += UiButton.widthFor(ui, updateButtonLabel()) + 4;
+		if (Updater.updateAvailable()) vx += UiButton.widthFor(ui, updateButtonLabel()) + 4;
 		String ver = "v" + AutoDonutClient.version();
-		ui.round(vx, by - 6, ui.width(ver) + 8, 12, 3, t.surface());
-		ui.text(ver, vx + 4, by - 3, t.textMuted());
+		boolean overVer = mx >= vx && mx < vx + ui.width(ver) + 8 && my >= by - 6 && my < by + 6;
+		ui.round(vx, by - 6, ui.width(ver) + 8, 12, 3, overVer ? t.surfaceHover() : t.surface());
+		ui.text(ver, vx + 4, by - 3, overVer ? t.text() : t.textMuted());
 		boolean online = offlineReason() == null;
 		String state = online ? "Online  -  Connected to Donut SMP" : "Offline";
 		int sx = vx + ui.width(ver) + 14;
@@ -936,6 +932,7 @@ public class AutoDonutScreen extends Screen {
 			case SAFETY -> "Safety";
 			case APPEARANCE -> "Appearance";
 			case UPDATING -> "Updating";
+			case CHANGELOG -> "Changelog";
 			case EDIT -> "Edit Item";
 		};
 		String subtitle = switch (page) {
@@ -943,7 +940,8 @@ public class AutoDonutScreen extends Screen {
 			case AUCTION -> "Pick items to sell. Matching stacks are listed on /ah automatically.";
 			case SAFETY -> "Pacing that keeps every action irregular and human.";
 			case APPEARANCE -> "Pick a colour style and an accent. Changes fade in instantly.";
-			case UPDATING -> "Keep AutoDonut up to date and see what changed in each version.";
+			case UPDATING -> "Keep AutoDonut up to date and see what the next version brings.";
+			case CHANGELOG -> "What changed in your version and every one before it.";
 			case EDIT -> "Choose the item, its price and which stack sizes to sell.";
 		};
 		int hy = py + TOP + 8;
@@ -982,6 +980,7 @@ public class AutoDonutScreen extends Screen {
 				drawPreview(rule, entry, x, top + 114 + Math.round(cr * 8) + editExtra - editScroll, w);
 			}
 			case UPDATING -> drawUpdating(x, top, w);
+			case CHANGELOG -> drawChangelog(x, top, w);
 			case APPEARANCE -> {
 				if (appearanceLabels.length == 2) {
 					ui.text(cfg.darkMode ? "Dark style" : "Light style", x, appearanceLabels[0], t.textMuted());
@@ -1124,54 +1123,76 @@ public class AutoDonutScreen extends Screen {
 	/** The rule's items as chips (icon, name, x). Overflow collapses into "+N more". */
 	private void drawUpdating(int x, int top, int w) {
 		Theme t = ui.theme;
-		var u = com.autodonut.client.Updater.state();
+		var u = Updater.state();
 		ui.round(x, top, w, 42, 3, t.surface());
-		if (com.autodonut.client.Updater.updateAvailable()) ui.outline(x, top, w, 42, 1, t.accent());
+		if (Updater.updateAvailable()) ui.outline(x, top, w, 42, 1, t.accent());
 		ui.text("AutoDonut v" + AutoDonutClient.version(), x + 8, top + 7, t.text());
-		var latest = com.autodonut.client.Updater.latest();
+		var latest = Updater.latest();
 		String status = switch (u) {
 			case IDLE -> "Not checked yet";
 			case CHECKING -> "Checking for updates...";
 			case UP_TO_DATE -> "You're on the latest version";
 			case AVAILABLE -> "Version " + latest.version() + " is available";
-			case DOWNLOADING -> "Downloading v" + latest.version() + "  " + Math.round(com.autodonut.client.Updater.progress() * 100) + "%";
+			case DOWNLOADING -> "Downloading v" + latest.version() + "  " + Math.round(Updater.progress() * 100) + "%";
 			case READY -> "v" + latest.version() + " is installed. Restart the game to use it";
-			case FAILED -> com.autodonut.client.Updater.error();
+			case FAILED -> Updater.error();
 		};
-		int sc = u == com.autodonut.client.Updater.State.FAILED ? t.danger()
-				: u == com.autodonut.client.Updater.State.READY ? t.success() : t.textMuted();
+		int sc = u == Updater.State.FAILED ? t.danger() : u == Updater.State.READY ? t.success() : t.textMuted();
 		ui.text(ui.trim(status, w - 130), x + 8, top + 22, sc);
-		if (u == com.autodonut.client.Updater.State.DOWNLOADING) {
-			ui.meter(x + w - 108, top + 19, 100, com.autodonut.client.Updater.progress(), t.accent());
-		}
+		if (u == Updater.State.DOWNLOADING) ui.meter(x + w - 108, top + 19, 100, Updater.progress(), t.accent());
 
-		int ly = top + 50 + 2 * (SAFETY_ROW_H + SAFETY_GAP);
-		ui.text("Changelog", x, ly + 2, t.textMuted());
-		if (com.autodonut.client.Updater.releases().isEmpty()) {
-			String msg = u == com.autodonut.client.Updater.State.CHECKING ? "Loading versions..." : "No versions loaded. Press Check for updates.";
-			ui.text(msg, x, ly + 18, t.textMuted());
+		ui.text("Next update", x, changelogTop - 14, t.textMuted());
+		List<Updater.Release> next = upcoming();
+		if (next.isEmpty()) {
+			String msg = u == Updater.State.CHECKING ? "Checking..." : u == Updater.State.FAILED ? "Couldn't load updates."
+					: "No update waiting. You're on the newest version.";
+			ui.text(msg, x, changelogTop + 2, t.textMuted());
 			return;
 		}
-		var r = selectedRelease();
-		int boxTop = changelogTop;
-		int bottom = py + ph - 8;
+		drawNotes(noteLines(next, w - 16), x, changelogTop, w, py + ph - 8);
+	}
+
+	private void drawChangelog(int x, int top, int w) {
+		Theme t = ui.theme;
+		changelogTop = top;
+		if (Updater.releases().isEmpty()) {
+			var u = Updater.state();
+			String msg = u == Updater.State.CHECKING ? "Loading the changelog..."
+					: u == Updater.State.FAILED ? "Couldn't load the changelog. Try Check for updates in Updating."
+					: "No versions loaded yet. Use Check for updates in Updating.";
+			ui.text(ui.trim(msg, w), x, top + 4, t.textMuted());
+			return;
+		}
+		drawNotes(noteLines(installedAndOlder(), w - 16), x, top, w, py + ph - 8);
+	}
+
+	/** Scrollable box of changelog lines (mouse wheel scrolls it). */
+	private void drawNotes(List<NoteLine> lines, int x, int boxTop, int w, int bottom) {
+		Theme t = ui.theme;
 		if (boxTop >= bottom - 12) return;
 		ui.round(x, boxTop, w, bottom - boxTop, 3, t.surface());
-		List<String> lines = changelogLines(w - 16);
 		int lh = ui.lineHeight() + 2;
 		int visible = (bottom - boxTop - 12) / lh;
 		changelogScroll = Math.max(0, Math.min(changelogScroll, Math.max(0, lines.size() - visible)));
 		ui.scissor(x, boxTop + 4, x + w, bottom - 4);
 		int yy = boxTop + 6;
-		if (r != null && !r.date().isEmpty()) {
-			ui.textRight(r.date(), x + w - 8, yy, t.textMuted());
-		}
-		for (int i = changelogScroll; i < lines.size(); i++) {
-			if (yy > bottom - 8) break;
-			ui.text(lines.get(i), x + 8, yy, t.text());
+		for (int i = changelogScroll; i < lines.size() && yy <= bottom - 8; i++) {
+			NoteLine l = lines.get(i);
+			if (l.kind() == 1) {
+				ui.fill(x + 6, yy - 1, x + 8, yy + ui.lineHeight() - 1, t.accent());
+				ui.bold(l.text(), x + 12, yy, t.text());
+			} else {
+				ui.text(l.text(), l.kind() == 2 ? x + 12 : x + 8, yy, l.kind() == 2 ? t.textMuted() : t.text());
+			}
 			yy += lh;
 		}
 		ui.endScissor();
+		if (lines.size() > visible && visible > 0) {
+			int trackH = bottom - boxTop - 8;
+			int thumbH = Math.max(10, trackH * visible / lines.size());
+			int thumbY = boxTop + 4 + (trackH - thumbH) * changelogScroll / Math.max(1, lines.size() - visible);
+			ui.round(x + w - 4, thumbY, 2, thumbH, 1, t.border());
+		}
 	}
 
 	private void drawChips(AuctionRule rule, int x, int y, int w) {
@@ -1413,6 +1434,17 @@ public class AutoDonutScreen extends Screen {
 			}
 		}
 
+		// Version text opens the changelog
+		int vx = versionX();
+		if (Updater.updateAvailable()) vx += UiButton.widthFor(ui, updateButtonLabel()) + 4;
+		int by = py + TOP / 2;
+		String ver = "v" + AutoDonutClient.version();
+		if (mx >= vx && mx < vx + ui.width(ver) + 8 && my >= by - 6 && my < by + 6) {
+			UiSounds.click();
+			setPage(Page.CHANGELOG);
+			return true;
+		}
+
 		// Close button
 		int cx = closeX(), cy = closeY();
 		if (mx >= cx && mx < cx + 16 && my >= cy && my < cy + 16) {
@@ -1495,7 +1527,7 @@ public class AutoDonutScreen extends Screen {
 			editorScrollTarget = Math.max(0, Math.min(editorMaxScroll(), editorScrollTarget - (float) scrollY * 22));
 			return true;
 		}
-		if (page == Page.UPDATING && my >= changelogTop) {
+		if ((page == Page.UPDATING || page == Page.CHANGELOG) && my >= changelogTop) {
 			changelogScroll = Math.max(0, changelogScroll - (int) Math.signum(scrollY) * 2);
 			return true;
 		}
