@@ -20,6 +20,7 @@ import com.autodonut.client.config.AutoDonutConfig;
  */
 public final class TitleButton {
 	private static final int SIZE = 20;
+	private static final int ICON = 14;
 	private static final Ui UI = new Ui();
 	private static final Anim HOVER = new Anim(0, 16);
 	private static long lastFrame = System.nanoTime();
@@ -46,13 +47,22 @@ public final class TitleButton {
 			client.gui.setScreen(new ChangelogScreen(screen));
 		}));
 
+		// Download icon left of the version text; only reacts while an update is available.
+		int ix = px - 4 - ICON;
+		Screens.getWidgets(screen).add(new HitArea(ix, y + 3, ICON, ICON, () -> {
+			if (!com.autodonut.client.Updater.updateAvailable()) return;
+			UiSounds.click();
+			client.gui.setScreen(new UpdateScreen(screen));
+		}));
+
 		ScreenEvents.afterExtract(screen).register((s, graphics, mouseX, mouseY, delta) -> {
 			draw(client, graphics, x, y, mouseX >= x && mouseX < x + SIZE && mouseY >= y && mouseY < y + SIZE,
-					mouseX >= px && mouseX < px + pw && mouseY >= y + 3 && mouseY < y + SIZE - 3);
+					mouseX >= px && mouseX < px + pw && mouseY >= y + 3 && mouseY < y + SIZE - 3,
+					mouseX >= ix && mouseX < ix + ICON && mouseY >= y + 3 && mouseY < y + 3 + ICON);
 		});
 	}
 
-	private static void draw(Minecraft client, GuiGraphicsExtractor graphics, int x, int y, boolean hovered, boolean textHovered) {
+	private static void draw(Minecraft client, GuiGraphicsExtractor graphics, int x, int y, boolean hovered, boolean textHovered, boolean iconHovered) {
 		long now = System.nanoTime();
 		UI.dt = Math.min(0.1f, (now - lastFrame) / 1_000_000_000f);
 		lastFrame = now;
@@ -83,6 +93,9 @@ public final class TitleButton {
 			UI.round(px, y + 3, pw, SIZE - 6, 3, (pill & 0x00FFFFFF) | 0xE0000000);
 			UI.text(version, px + 6, y + (SIZE - 8) / 2 + 1, textHovered ? t.text() : t.textMuted());
 		}
+		if (com.autodonut.client.Updater.updateAvailable() && pillIn > 0.02f) {
+			drawDownloadIcon(t, px - 4 - ICON, y + 3, iconHovered, now);
+		}
 		UI.alpha = tileIn;
 		y -= Math.round((1f - tileIn) * 10);
 
@@ -97,6 +110,26 @@ public final class TitleButton {
 		int size = Math.round((SIZE - 6) * tileIn);
 		if (size >= 2) UI.logo(x + SIZE / 2 - size / 2, y + SIZE / 2 - lift - size / 2, size);
 
+	}
+
+	/** Pill with a down arrow over a tray, gently bobbing up and down. */
+	private static void drawDownloadIcon(Theme t, int x, int y, boolean hovered, long now) {
+		int bob = Math.round((float) Math.sin(now / 1_000_000_000.0 * Math.PI * 1.4) * 1.5f);
+		int bg = hovered ? t.accent() : t.panel();
+		UI.round(x, y, ICON, ICON, 3, (bg & 0x00FFFFFF) | 0xE0000000);
+		int c = hovered ? t.onAccent() : t.accent();
+		int cx = x + ICON / 2;
+		int ay = y + 2 + bob;
+		// Arrow: stem, then a head narrowing to a point
+		UI.fill(cx - 1, ay, cx + 1, ay + 5, c);
+		UI.fill(cx - 4, ay + 4, cx + 4, ay + 5, c);
+		UI.fill(cx - 3, ay + 5, cx + 3, ay + 6, c);
+		UI.fill(cx - 2, ay + 6, cx + 2, ay + 7, c);
+		UI.fill(cx - 1, ay + 7, cx + 1, ay + 8, c);
+		// Tray (stays still)
+		UI.fill(x + 3, y + ICON - 3, x + ICON - 3, y + ICON - 2, c);
+		UI.fill(x + 3, y + ICON - 5, x + 4, y + ICON - 3, c);
+		UI.fill(x + ICON - 4, y + ICON - 5, x + ICON - 3, y + ICON - 3, c);
 	}
 
 	/** Clickable area with no visuals of its own (everything is drawn by {@link #draw}). */
