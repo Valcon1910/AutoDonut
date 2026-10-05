@@ -414,7 +414,7 @@ public final class AutoBuyController {
 			}
 			return;
 		}
-		if (auction.busy()) {
+		if (AutoAuctionController.get().busy()) {
 			// Timers keep running while Auto Auction lists; a check that comes due waits at zero
 			// until the listing is done, then goes right away.
 			ruleCursor = cursorBefore;
