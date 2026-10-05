@@ -40,8 +40,9 @@ public final class ItemIndex {
 					list.add(new Entry(idOf(item), stack.getHoverName().getString(), stack));
 				});
 			} catch (RuntimeException e) {
-				// Item data isn't bound yet (e.g. while joining a server). Try again later.
-				return List.of();
+				// Item data isn't bound yet (title screen, joining a server): search by readable ids
+				// for now, without icons, and build the full list once the game has item data.
+				return offlineEntries();
 			}
 			list.sort(Comparator.comparing(Entry::name));
 			BY_ID.clear();
@@ -49,6 +50,35 @@ public final class ItemIndex {
 			entries = list;
 		}
 		return entries;
+	}
+
+	private static List<Entry> offline;
+
+	private static List<Entry> offlineEntries() {
+		if (offline == null) {
+			List<Entry> list = new ArrayList<>();
+			BuiltInRegistries.ITEM.keySet().forEach(key -> {
+				String id = key.toString();
+				if (id.equals("minecraft:air")) return;
+				list.add(new Entry(id, prettyName(key.getPath()), ItemStack.EMPTY));
+			});
+			list.sort(Comparator.comparing(Entry::name));
+			offline = list;
+		}
+		BY_ID.clear();
+		for (Entry e : offline) BY_ID.put(e.id(), e);
+		return offline;
+	}
+
+	/** "diamond_sword" -> "Diamond Sword". */
+	private static String prettyName(String path) {
+		StringBuilder sb = new StringBuilder();
+		for (String part : path.split("_")) {
+			if (part.isEmpty()) continue;
+			if (sb.length() > 0) sb.append(' ');
+			sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+		}
+		return sb.toString();
 	}
 
 	/** Tag ids ("c:foods") of a stack, as currently sent by the server. */

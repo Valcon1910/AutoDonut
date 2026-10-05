@@ -695,7 +695,7 @@ public class AutoDonutScreen extends Screen {
 				new SettingRow("Speed", "How often /ah is checked",
 						new Segmented(speedLabels(), () -> rule.speed.ordinal(), i -> rule.speed = BuyRule.Speed.values()[i])
 								.tooltips("Checks every 15–30s.", "Checks every 5–10s.", "Checks every 2–5s.", "Checks every 1–2s.",
-										"Checks every 0.5–1s."), 250)
+										"Checks every 0.5–1s."), speedControlWidth(w))
 						.warning(() -> switch (rule.speed) {
 							case FAST -> "Checks every 1–2s. Much faster than a person; more noticeable to staff.";
 							case AGGRESSIVE -> "Checks more than once a second. No person can do that, so staff and anti-cheat "
@@ -745,6 +745,13 @@ public class AutoDonutScreen extends Screen {
 			return "Minimum and maximum are almost the same, so purchases happen on a fixed rhythm. Leave at least 2s between them.";
 		}
 		return null;
+	}
+
+	/** Wide enough for every speed label (Aggressive included), leaving room for the row's title. */
+	private int speedControlWidth(int rowW) {
+		int total = 0;
+		for (String l : speedLabels()) total += ui.width(l) + 14;
+		return Math.min(rowW - 110, Math.max(250, total));
 	}
 
 	private static String[] speedLabels() {
