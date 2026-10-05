@@ -153,14 +153,24 @@ public final class BootSequence {
 		Minecraft mc = Minecraft.getInstance();
 		int cx = graphics.guiWidth() / 2;
 		int y = graphics.guiHeight() / 2 - 30;
-		for (int i = 0; i < done; i++) {
-			float fade = Math.min(1f, (elapsed - (i + 1) * STEP_MS) / 200f);
+		// Finished steps in past tense; the step running now right below them, in present tense.
+		int shown = Math.min(STEPS.size(), done + 1);
+		for (int i = 0; i < shown; i++) {
+			boolean running = i == done;
+			float fade = Math.min(1f, (elapsed - i * STEP_MS) / 120f);
 			int alpha = Math.max(8, Math.round(fade * 255));
-			boolean ok = results.get(i);
-			String text = (ok ? "✔ " : "✘ ") + STEPS.get(i).label();
-			int color = ok ? 0x9AA0AA : 0xE5484D;
+			String text;
+			int color;
+			if (running) {
+				text = STEPS.get(i).label() + ".".repeat((int) ((elapsed / 250) % 4));
+				color = 0xFFFFFF;
+			} else {
+				boolean ok = results.get(i);
+				text = (ok ? "\u2714 " : "\u2718 ") + stepDoneLabel(i);
+				color = ok ? 0x9AA0AA : 0xE5484D;
+			}
 			int lineY = y + i * 11 + Math.round((1f - fade) * 4);
-			graphics.text(mc.font, text, cx - mc.font.width(text) / 2, lineY, (alpha << 24) | color, false);
+			graphics.text(mc.font, text, cx - mc.font.width(running ? STEPS.get(i).label() : text) / 2, lineY, (alpha << 24) | color, false);
 		}
 	}
 
