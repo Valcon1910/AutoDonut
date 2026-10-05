@@ -31,15 +31,16 @@ public final class StatusHud {
 		lastFrame = now;
 
 		boolean noResponse = !com.autodonut.client.ServerProbe.responding();
-		boolean active = cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active()
-				&& (auction.isActive() || auction.quickSelling() || auction.lagging() || noResponse) && mc.player != null;
-		// With a screen open (inventory, chat, ...) the label folds down to just the logo badge.
-		boolean expanded = active && mc.gui.screen() == null;
-		long ms = System.currentTimeMillis();
-		if (expanded || auction.busy() || auction.quickSelling() || auction.lagging() || noResponse) lastActivity = ms;
-		if (!expanded && ms - lastActivity > BADGE_IDLE_MS) active = false;
-		// Stay out of the way in PvP; only the lag warning may show.
+		boolean allowed = cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active() && mc.player != null;
 		boolean lagWarning = auction.lagging() || noResponse;
+		boolean wanted = allowed && (auction.isActive() || auction.quickSelling() || lagWarning);
+		// Full label only with no screen open and something to show; otherwise it folds to the logo badge,
+		// which stays for 10 seconds after the last activity and then fades away.
+		boolean expanded = wanted && mc.gui.screen() == null;
+		long ms = System.currentTimeMillis();
+		if (expanded || auction.busy() || auction.quickSelling() || lagWarning) lastActivity = ms;
+		boolean active = allowed && (expanded || ms - lastActivity <= BADGE_IDLE_MS);
+		// Stay out of the way in PvP; only the lag warning may show.
 		if (auction.inCombat() && !lagWarning) active = false;
 		expanded = expanded && active;
 		VISIBLE.set(active ? 1 : 0);
@@ -63,11 +64,10 @@ public final class StatusHud {
 		UI.alpha = v * 0.92f;
 		UI.card(x, y, w, 16, 8, UI.theme.panel(), UI.theme.border());
 
-		// The logo image can't fade, so it stays drawn and the panel's dark shade is laid over it.
+		// The logo image can't fade, so it shrinks away into its centre instead.
 		UI.alpha = 1f;
-		UI.logo(x + 3, y + 2, 12);
-		int shade = Math.round((1f - v) * 255);
-		if (shade > 0) UI.round(x + 3, y + 2, 12, 12, 6, (shade << 24) | (UI.theme.panel() & 0x00FFFFFF));
+		int size = Math.round(12 * Anim.easeInOut(v));
+		if (size >= 2) UI.logo(x + 9 - size / 2, y + 8 - size / 2, size);
 
 		if (e > 0.05f) {
 			UI.alpha = v * 0.92f * e;
