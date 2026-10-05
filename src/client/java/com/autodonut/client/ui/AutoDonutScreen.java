@@ -646,7 +646,7 @@ public class AutoDonutScreen extends Screen {
 		String[] searchLabels = new String[searchModes.length];
 		for (int i = 0; i < searchModes.length; i++) searchLabels[i] = searchModes[i].label();
 		Segmented search = new Segmented(searchLabels, () -> rule.searchMode.ordinal(), i -> rule.searchMode = searchModes[i])
-				.tooltips("Opens /ah with the item's name so only matching listings show. Fastest; needs a plain item (not a #tag) to search for.",
+				.tooltips("Opens /ah <item name> so only that item shows, then picks listings by your quantity and budget. With several items or a #tag it browses instead.",
 						"Opens /ah and flips through the pages looking for matches. Works with #tags, but slower and more clicks.");
 		search.bounds(x + half + 6, top + 62, w - half - 6, 18);
 		widgets.add(search);
@@ -764,8 +764,8 @@ public class AutoDonutScreen extends Screen {
 		} else {
 			summary = "Budget: " + rule.budgetText() + " for the whole listing";
 		}
-		if (rule.searchMode == BuyRule.SearchMode.SEARCH && rule.items.stream().anyMatch(e -> e.startsWith("#"))) {
-			summary += "  -  #tags use Browse";
+		if (rule.searchMode == BuyRule.SearchMode.SEARCH && (rule.items.size() > 1 || rule.items.stream().anyMatch(e -> e.startsWith("#")))) {
+			summary += "  -  several items or #tags browse";
 		}
 		int qtyLabelY = top + 108 + shift;
 		if (!underResults(qtyLabelY, qtyLabelY + 9)) ui.text("Quantity", x, qtyLabelY, t.textMuted());

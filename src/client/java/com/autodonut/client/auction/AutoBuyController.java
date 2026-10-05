@@ -419,11 +419,9 @@ public final class AutoBuyController {
 		pages = 0;
 		String command = "ah";
 		searched = false;
-		if (due.searchMode == BuyRule.SearchMode.SEARCH) {
-			// Rotate through the plain items; a #tag can't be searched, so it browses instead.
-			int cursor = searchCursor.merge(due, 1, Integer::sum) - 1;
-			String entry = due.items.get(Math.floorMod(cursor, due.items.size()));
-			ItemIndex.Entry e = entry.startsWith("#") ? null : ItemIndex.byId(entry);
+		// Search only for a single plain item; several items or a #tag are found by browsing.
+		if (due.searchMode == BuyRule.SearchMode.SEARCH && due.items.size() == 1 && !due.items.get(0).startsWith("#")) {
+			ItemIndex.Entry e = ItemIndex.byId(due.items.get(0));
 			if (e != null) {
 				command = "ah " + e.name();
 				searched = true;
