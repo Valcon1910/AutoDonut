@@ -46,19 +46,19 @@ public final class OfflineIcons {
 			blit(g, icon.flat(), x, y);
 			return;
 		}
-		// Isometric cube in a 16x16 box: top rhombus, darker left face, darkest right face.
-		face(g, icon.top(), x, y, new Matrix3x2f(0.5f, -0.25f, 0.5f, 0.25f, 0f, 4f), 0);
-		face(g, icon.left(), x, y, new Matrix3x2f(0.5f, 0.25f, 0f, 0.5f, 0f, 4f), 0x40000000);
-		face(g, icon.right(), x, y, new Matrix3x2f(0.5f, -0.25f, 0f, 0.5f, 8f, 8f), 0x70000000);
+		// Isometric cube in a 16x16 box: lit top, dimmer left face, dimmest right face (like inventory lighting).
+		face(g, icon.top(), x, y, new Matrix3x2f(0.5f, -0.25f, 0.5f, 0.25f, 0f, 4f), 0xFFFFFFFF);
+		face(g, icon.left(), x, y, new Matrix3x2f(0.5f, 0.25f, 0f, 0.5f, 0f, 4f), 0xFFC4C4C4);
+		face(g, icon.right(), x, y, new Matrix3x2f(0.5f, -0.25f, 0f, 0.5f, 8f, 8f), 0xFF9A9A9A);
 	}
 
-	private static void face(GuiGraphicsExtractor g, Tex tex, int x, int y, Matrix3x2f m, int shade) {
+	private static void face(GuiGraphicsExtractor g, Tex tex, int x, int y, Matrix3x2f m, int tint) {
 		if (tex == null) return;
 		g.pose().pushMatrix();
 		g.pose().translate(x, y);
 		g.pose().mul(m);
-		blit(g, tex, 0, 0);
-		if (shade != 0) g.fill(0, 0, 16, 16, shade);
+		// Tinted rather than overlaid: the GUI may draw plain fills before textures.
+		g.blit(RenderPipelines.GUI_TEXTURED, tex.id(), 0, 0, 0, 0, 16, 16, tex.w(), tex.w(), tex.w(), tex.h(), tint);
 		g.pose().popMatrix();
 	}
 
