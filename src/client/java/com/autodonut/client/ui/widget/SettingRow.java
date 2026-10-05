@@ -80,6 +80,8 @@ public class SettingRow extends Widget {
 
 	@Override
 	public boolean mouseClicked(double mx, double my) {
+		// A row scrolled or folded out of view must not catch clicks meant for what's there now.
+		if (!visible) return false;
 		return control.mouseClicked(mx, my);
 	}
 
