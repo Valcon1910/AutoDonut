@@ -29,6 +29,7 @@ import com.autodonut.client.config.AutoDonutConfig;
  * running one. The swap finishes when the game closes, so the update takes effect on the next start.
  */
 public final class Updater {
+	private static final String FEED = "https://github.com/Valcon1910/AutoDonut/releases.atom";
 	private static final String RELEASES = "https://api.github.com/repos/Valcon1910/AutoDonut/releases?per_page=30";
 
 	public enum State { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, DOWNLOADING, READY, FAILED }
@@ -117,6 +118,9 @@ public final class Updater {
 		HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
 		// 404: no releases published yet (or the repository isn't public), so nothing to update to.
 		if (res.statusCode() == 404) return new ArrayList<>();
+		// 403/429: GitHub's API limit for this network (60 checks an hour) is used up; the
+		// release feed has no such limit and carries the same versions and notes.
+		if (res.statusCode() == 403 || res.statusCode() == 429) return fetchFeed();
 		if (res.statusCode() != 200) throw new IOException("HTTP " + res.statusCode());
 		JsonArray arr = JsonParser.parseString(res.body()).getAsJsonArray();
 		List<Release> out = new ArrayList<>();
@@ -141,6 +145,50 @@ public final class Updater {
 		}
 		out.sort((a, b) -> compare(b.version(), a.version()));
 		return out;
+	}
+
+	private static List<Release> fetchFeed() throws IOException, InterruptedException {
+		HttpRequest req = HttpRequest.newBuilder(URI.create(FEED))
+				.header("User-Agent", "AutoDonut")
+				.timeout(Duration.ofSeconds(15))
+				.build();
+		HttpResponse<String> res = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+		if (res.statusCode() != 200) throw new IOException("HTTP " + res.statusCode());
+		List<Release> out = new ArrayList<>();
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("<entry>(.*?)</entry>", java.util.regex.Pattern.DOTALL)
+				.matcher(res.body());
+		while (m.find()) {
+			String entry = m.group(1);
+			String href = tag(entry, "releases/tag/([^\"]+)\"");
+			if (href.isEmpty()) continue;
+			String version = href.startsWith("v") || href.startsWith("V") ? href.substring(1) : href;
+			String date = tag(entry, "<updated>([^<]+)</updated>");
+			if (date.length() >= 10) date = date.substring(0, 10);
+			String notes = htmlToText(unescape(tag(entry, "<content[^>]*>(.*?)</content>")));
+			// Release jars are always named autodonut-<version>.jar by the release workflow.
+			String jar = "https://github.com/Valcon1910/AutoDonut/releases/download/" + href + "/autodonut-" + version + ".jar";
+			out.add(new Release(version, notes, jar, date));
+		}
+		out.sort((a, b) -> compare(b.version(), a.version()));
+		return out;
+	}
+
+	private static String tag(String text, String regex) {
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile(regex, java.util.regex.Pattern.DOTALL).matcher(text);
+		return m.find() ? m.group(1) : "";
+	}
+
+	private static String unescape(String s) {
+		return s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+				.replace("&#39;", "'").replace("&amp;", "&");
+	}
+
+	/** Turns the feed's HTML notes back into "- item" lines. */
+	private static String htmlToText(String html) {
+		String s = html.replaceAll("(?i)<li[^>]*>", "\n- ")
+				.replaceAll("(?i)<br\\s*/?>|</p>|</h\\d>", "\n")
+				.replaceAll("<[^>]+>", "");
+		return unescape(s).replaceAll("\n{3,}", "\n\n").strip();
 	}
 
 	private static String str(JsonObject o, String key) {
