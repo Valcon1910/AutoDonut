@@ -418,7 +418,7 @@ public class AutoDonutScreen extends Screen {
 										+ "and selected slot never change."),
 						new SettingRow("Auto-confirm", "Click the confirm button after /ah sell",
 								toggle(() -> cfg.autoConfirm, v -> cfg.autoConfirm = v), ToggleSwitch.WIDTH),
-						new SettingRow("Confirm in background", "Don't show the confirm menu while clicking it",
+						new SettingRow("Menus in background", "Hide the confirm menu and Auto Buy's /ah menus while they're clicked",
 								toggle(() -> cfg.confirmInBackground, v -> cfg.confirmInBackground = v), ToggleSwitch.WIDTH),
 						new SettingRow("Server check", "Ping the server every 10s; pause and warn if it stops answering",
 								toggle(() -> cfg.serverCheck, v -> cfg.serverCheck = v), ToggleSwitch.WIDTH),

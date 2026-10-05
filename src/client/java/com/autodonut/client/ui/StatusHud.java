@@ -38,7 +38,9 @@ public final class StatusHud {
 		boolean wanted = allowed && (auction.isActive() || buy.isActive() || auction.quickSelling() || lagWarning);
 		// Full label only with no screen open and something to show; otherwise it folds to the logo badge,
 		// which stays for 10 seconds after the last activity and then fades away.
-		boolean expanded = wanted && mc.gui.screen() == null;
+		// A menu being clicked in the background is invisible, so it counts as no screen.
+		net.minecraft.client.gui.screens.Screen open = mc.gui.screen();
+		boolean expanded = wanted && (open == null || auction.isHidden(open) || buy.isHidden(open));
 		long ms = System.currentTimeMillis();
 		if (expanded || auction.busy() || buy.busy() || auction.quickSelling() || lagWarning) lastActivity = ms;
 		boolean active = allowed && (expanded || ms - lastActivity <= BADGE_IDLE_MS);

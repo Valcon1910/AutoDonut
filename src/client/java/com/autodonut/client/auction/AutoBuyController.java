@@ -113,6 +113,19 @@ public final class AutoBuyController {
 		return cfg.autoBuyEnabled && !Lockdown.active() && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
 	}
 
+	/**
+	 * True while this screen is a menu Auto Buy is working in (the /ah menu, its pages and the
+	 * confirm menu) and "menus in background" is on: it isn't drawn. Right after the command and
+	 * after clicking a listing, a newly opened chest menu is hidden too so it never flashes up.
+	 */
+	public boolean isHidden(Screen screen) {
+		if (screen == null || !busy() || !AutoDonutConfig.get().confirmInBackground) return false;
+		if (screen == ahScreen || screen == confirmScreen) return true;
+		if (phase != Phase.OPENING && phase != Phase.AWAIT_CONFIRM && phase != Phase.PAGING) return false;
+		LocalPlayer player = Minecraft.getInstance().player;
+		return screen instanceof AbstractContainerScreen<?> && player != null && player.containerMenu != player.inventoryMenu;
+	}
+
 	/** Whether this screen is a menu Auto Buy opened (the pause key also works there). */
 	public boolean ownsScreen(Screen screen) {
 		return screen != null && busy() && (screen == ahScreen || screen == confirmScreen);
@@ -264,6 +277,16 @@ public final class AutoBuyController {
 		}
 		// Mid-check: the player closed the menu or opened something else.
 		boolean ours = open != null && (open == ahScreen || open == confirmScreen);
+		boolean serverMenu = open instanceof AbstractContainerScreen<?> && player.containerMenu != player.inventoryMenu;
+		boolean confirmDialog = phase == Phase.AWAIT_CONFIRM && open != null && looksLikeConfirm(open);
+		if (open != null && !ours && !serverMenu && !confirmDialog) {
+			// The player opened their own screen (chat, the panel, ...): give way instead of fighting them.
+			BuyRule current = rule;
+			abort(mc);
+			if (current != null) nextCheckAt.put(current, now + humanizer.between(current.speed.minMs, current.speed.maxMs));
+			status = "Stopped (you opened a menu)";
+			return;
+		}
 		if (phase != Phase.OPENING && phase != Phase.AWAIT_CONFIRM && phase != Phase.RESULT && !ours) {
 			reset();
 			status = "Stopped (menu closed)";
