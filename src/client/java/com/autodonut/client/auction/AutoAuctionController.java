@@ -63,7 +63,11 @@ public final class AutoAuctionController {
 	private static final long SLOTS_FULL_RECHECK_MS = 10 * 60_000L;
 	private long slotsFullUntil;
 
-	private enum Phase { IDLE, SPLITTING, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, HOLDING, RESTORE }
+	private enum Phase { IDLE, SPLITTING, REACTING, PRE_SEND, AWAIT_CONFIRM, CONFIRMING, HOLDING, LAG_CHECK, RESTORE }
+
+	/** How long the lag check waits for the server to answer a ping. */
+	private static final long LAG_CHECK_MS = 3000;
+	private long lagCheckSentAt;
 
 	/** How long to wait for a confirmation menu after sending the sell command. */
 	private static final long CONFIRM_WAIT_MS = 4000;
@@ -79,10 +83,7 @@ public final class AutoAuctionController {
 	/** When the current step started; a step running longer than {@link #STEP_TIMEOUT_MS} is abandoned. */
 	private long phaseStartedAt;
 	private long lastTickAt;
-	/** Confirmation attempts for the current listing (max {@link #MAX_CONFIRM_ATTEMPTS}, {@link #CONFIRM_RETRY_MS} apart). */
-	private int confirmAttempts;
 	private String lastCommand = "";
-	private static final int MAX_CONFIRM_ATTEMPTS = 3;
 	private static final long CONFIRM_RETRY_MS = 3000;
 
 	/** True while a listing is in progress (not idle / counting down). */
@@ -311,7 +312,8 @@ public final class AutoAuctionController {
 		long sinceLastTick = Math.min(1000, rawGap);
 		lastTickAt = now;
 		updateLag(player, now, rawGap);
-		if (lagging && quickRule == null && phase != Phase.AWAIT_CONFIRM && phase != Phase.CONFIRMING && phase != Phase.HOLDING) {
+		if (lagging && quickRule == null && phase != Phase.AWAIT_CONFIRM && phase != Phase.CONFIRMING && phase != Phase.HOLDING
+				&& phase != Phase.LAG_CHECK) {
 			queue("the lag clears (ping " + ping + "ms)", now, sinceLastTick);
 			// Never leave an item "held" while waiting out lag.
 			if (phase == Phase.RESTORE) restoreHand();
@@ -319,7 +321,8 @@ public final class AutoAuctionController {
 			return;
 		}
 		boolean panelOpen = mc.gui.screen() instanceof AutoDonutScreen;
-		boolean midPrompt = phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.HOLDING;
+		boolean midPrompt = phase == Phase.AWAIT_CONFIRM || phase == Phase.CONFIRMING || phase == Phase.HOLDING
+				|| phase == Phase.LAG_CHECK;
 		if (panelOpen && cfg.pauseInPanel && quickRule == null && !midPrompt) {
 			queue("you close AutoDonut", now, sinceLastTick);
 			return;
@@ -381,6 +384,10 @@ public final class AutoAuctionController {
 		}
 		if (phase == Phase.CONFIRMING) {
 			tickConfirming(mc, player, now);
+			return;
+		}
+		if (phase == Phase.LAG_CHECK) {
+			tickLagCheck(now);
 			return;
 		}
 		if (phase == Phase.HOLDING) {
@@ -668,7 +675,6 @@ public final class AutoAuctionController {
 		listedCount = held.getCount();
 		lastCommandAt = now;
 		lastCommand = command;
-		confirmAttempts = 1;
 		player.connection.sendCommand(command);
 		recentListings.addLast(now);
 		listedThisSession++;
@@ -701,17 +707,11 @@ public final class AutoAuctionController {
 		} else if (now > phaseUntil) {
 			LocalPlayer player = mc.player;
 			boolean itemStillThere = player != null && !serverConfirmed && stillMatches(sourceStack(player));
-			if (itemStillThere && confirmAttempts < MAX_CONFIRM_ATTEMPTS) {
-				// No prompt yet and nothing listed: try again (at most 3 times, 3s apart).
-				confirmAttempts++;
-				lastCommandAt = now;
-				player.connection.sendCommand(lastCommand);
-				phaseUntil = now + Math.round(CONFIRM_RETRY_MS * lagScale());
-				status = "Retrying confirmation (" + confirmAttempts + "/" + MAX_CONFIRM_ATTEMPTS + ")";
+			if (itemStillThere) {
+				// No prompt and nothing listed: check whether the server is lagging before retrying.
+				startLagCheck(mc, now);
 			} else {
-				// Listed directly without a prompt, or out of attempts. Out of attempts with no
-				// answer at all means commands aren't getting through: pause like lag.
-				if (itemStillThere) lagFor(now, 10_000, "Server isn't answering commands (lag)");
+				// Listed directly without a prompt.
 				setPhase(Phase.RESTORE);
 				phaseUntil = now + humanizer.between(300, 900);
 			}
@@ -783,15 +783,43 @@ public final class AutoAuctionController {
 		}
 	}
 
+	/** Pings the server once to tell lag apart from a listing that simply didn't go through. */
+	private void startLagCheck(Minecraft mc, long now) {
+		if (!ServerProbe.pingNow(mc)) {
+			// Pings can't be checked on this version: just start over.
+			retryFromStart(now);
+			return;
+		}
+		lagCheckSentAt = now;
+		setPhase(Phase.LAG_CHECK);
+		phaseUntil = now + LAG_CHECK_MS;
+		status = "Checking the server";
+	}
+
+	private void tickLagCheck(long now) {
+		if (ServerProbe.answeredSince(lagCheckSentAt)) {
+			// The server answers quickly, so it isn't lag: try the listing again from the start.
+			retryFromStart(now);
+		} else if (now > phaseUntil) {
+			// No answer: the server is lagging. Put things back and wait for the lag to clear.
+			reset();
+			lagFor(now, 10_000, "Server isn't answering (lag)");
+			status = "Server not responding (Lag)";
+		}
+	}
+
+	private void retryFromStart(long now) {
+		reset();
+		nextAllowedAt = now + humanizer.between(1000, 2500);
+		status = "Didn't go through, trying again";
+	}
+
 	private void tickHolding(long now) {
 		if (!serverConfirmed && now < holdUntil) return;
 		Screen open = Minecraft.getInstance().gui.screen();
-		if (!serverConfirmed && confirmAttempts < MAX_CONFIRM_ATTEMPTS && open != null && open == confirmScreen) {
-			// The prompt is still there 3s after clicking: click it again.
-			confirmAttempts++;
-			setPhase(Phase.CONFIRMING);
-			phaseUntil = now + humanizer.between(40, 110);
-			status = "Retrying confirmation (" + confirmAttempts + "/" + MAX_CONFIRM_ATTEMPTS + ")";
+		if (!serverConfirmed && open != null && open == confirmScreen) {
+			// The prompt is still there 3s after clicking: check for lag, then start over.
+			startLagCheck(Minecraft.getInstance(), now);
 			return;
 		}
 		restoreHand();

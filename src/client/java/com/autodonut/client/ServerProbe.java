@@ -27,6 +27,7 @@ public final class ServerProbe {
 	private static boolean responding = true;
 	private static long nextPingAt;
 	private static long pendingSince = -1;
+	private static long lastPongAt;
 
 	private ServerProbe() {
 	}
@@ -45,8 +46,29 @@ public final class ServerProbe {
 	/** Called by the client mixin whenever a pong arrives. */
 	public static void onPong() {
 		hookWorks = true;
+		lastPongAt = System.currentTimeMillis();
 		pendingSince = -1;
 		responding = true;
+	}
+
+	/**
+	 * Pings right away (unless one is already on its way) for an on-demand lag check. Returns false
+	 * when pings can't tell anything on this version, so the caller shouldn't wait for an answer.
+	 */
+	public static boolean pingNow(Minecraft mc) {
+		LocalPlayer player = mc.player;
+		if (player == null) return false;
+		long now = System.currentTimeMillis();
+		if (pendingSince < 0) {
+			if (!send(player, now)) return false;
+			pendingSince = now;
+		}
+		return hookWorks;
+	}
+
+	/** Whether a pong arrived at or after the given moment. */
+	public static boolean answeredSince(long time) {
+		return lastPongAt >= time;
 	}
 
 	public static void tick(Minecraft mc) {
