@@ -620,6 +620,7 @@ public class AutoDonutScreen extends Screen {
 		widgets.add(new UiButton("Done", UiButton.Style.PRIMARY, this::finishEditing).bounds(x + w - doneW, by, doneW, 18));
 		widgets.add(new UiButton("Delete", UiButton.Style.DANGER, () -> {
 			cfg.rules.remove(rule);
+			cfg.onRuleRemoved();
 			AutoDonutConfig.save();
 			editing = null;
 			setPage(Page.AUCTION);
@@ -863,6 +864,7 @@ public class AutoDonutScreen extends Screen {
 				}),
 				new MenuEntry("Delete", true, () -> {
 					cfg.rules.remove(rule);
+					cfg.onRuleRemoved();
 					AutoDonutConfig.save();
 					rebuildPending = true;
 				})), mx, my);
@@ -1035,7 +1037,10 @@ public class AutoDonutScreen extends Screen {
 
 	/** Rules left without an item are dropped; everything else is kept and saved. */
 	private void cleanUpEditing() {
-		if (editing != null && !editing.hasItems()) cfg.rules.remove(editing);
+		if (editing != null && !editing.hasItems()) {
+			cfg.rules.remove(editing);
+			cfg.onRuleRemoved();
+		}
 		editing = null;
 		AutoDonutConfig.save();
 	}

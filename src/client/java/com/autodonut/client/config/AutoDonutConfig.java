@@ -143,6 +143,11 @@ public class AutoDonutConfig {
 		}
 	}
 
+	/** After an item is removed: turns Auto Auction off when no enabled item is left. */
+	public void onRuleRemoved() {
+		if (rules.stream().noneMatch(r -> r.enabled && r.hasItems())) autoAuctionEnabled = false;
+	}
+
 	/** Whether at least one Auto Buy item is fully set up (item + budget). */
 	public boolean hasBuyItems() {
 		return buyRules.stream().anyMatch(BuyRule::isComplete);
