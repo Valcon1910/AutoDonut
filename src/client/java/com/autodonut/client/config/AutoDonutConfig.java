@@ -143,8 +143,9 @@ public class AutoDonutConfig {
 		}
 	}
 
-	/** After an item is removed: turns Auto Auction off when no enabled item is left. */
-	public void onRuleRemoved() {
+	/** Removes an Auto Auction item; Auto Auction turns off when no enabled item is left. */
+	public void removeRule(AuctionRule rule) {
+		rules.remove(rule);
 		if (rules.stream().noneMatch(r -> r.enabled && r.hasItems())) autoAuctionEnabled = false;
 	}
 
