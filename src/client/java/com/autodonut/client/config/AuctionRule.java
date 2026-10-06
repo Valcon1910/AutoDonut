@@ -24,6 +24,21 @@ public class AuctionRule {
 	public int max = 64;
 	public boolean enabled = true;
 
+	/** A deep copy: same items and settings, its own item list. */
+	public AuctionRule copy() {
+		AuctionRule c = new AuctionRule();
+		c.items = new ArrayList<>(items);
+		c.itemId = itemId;
+		c.priceText = priceText;
+		c.pricePerItem = pricePerItem;
+		c.mode = mode;
+		c.amount = amount;
+		c.min = min;
+		c.max = max;
+		c.enabled = enabled;
+		return c;
+	}
+
 	/** Parsed price, or -1 when the price text is missing or invalid. */
 	public long price() {
 		return PriceFormat.parse(priceText);

@@ -125,6 +125,17 @@ public class AutoDonutScreen extends Screen {
 	private AuctionRule editing;
 	/** Auto Buy item open in the buy editor. */
 	private BuyRule buyEditing;
+	/** Rule grids on the current page (null elsewhere), for right-click menus. */
+	private RuleGrid<AuctionRule> auctionGrid;
+	private RuleGrid<BuyRule> buyGrid;
+	/** Right-click menu of a rule card: its entries (null = closed), position and animations. */
+	private record MenuEntry(String label, boolean danger, Runnable action) { }
+	private List<MenuEntry> contextMenu;
+	private int menuX, menuY;
+	private int menuHover = -1;
+	private final Anim menuOpen = new Anim(0, 18);
+	private final Anim[] menuRowHover = {new Anim(0, 18), new Anim(0, 18), new Anim(0, 18)};
+	private static final int MENU_ROW_H = 16;
 	/** Height of the open editor's content (before the chip list grows), for scrolling. */
 	private int editorContentH = 148;
 	/** Widget that fades and slides in after a mode switch rebuilt the editor (e.g. the budget input). */
@@ -273,6 +284,9 @@ public class AutoDonutScreen extends Screen {
 
 	private void buildPage() {
 		widgets.clear();
+		auctionGrid = null;
+		buyGrid = null;
+		contextMenu = null;
 		searchField = null;
 		results = List.of();
 		int x = contentX();
@@ -363,6 +377,7 @@ public class AutoDonutScreen extends Screen {
 				}).locked(this::runLocked);
 				grid.bounds(x, top + 50, w, py + ph - 8 - (top + 50));
 				widgets.add(grid);
+				auctionGrid = grid;
 			}
 			case AUTOBUY -> {
 				ToggleSwitch master = new ToggleSwitch(() -> cfg.autoBuyEnabled && !runLocked() && cfg.hasBuyItems(), v -> {
@@ -378,6 +393,7 @@ public class AutoDonutScreen extends Screen {
 				}).locked(this::runLocked);
 				grid.bounds(x, top + 50, w, py + ph - 8 - (top + 50));
 				widgets.add(grid);
+				buyGrid = grid;
 			}
 			case SAFETY -> {
 				widgets.add(new UiButton("Reset to defaults", UiButton.Style.SECONDARY, () -> {
@@ -835,7 +851,121 @@ public class AutoDonutScreen extends Screen {
 		appearanceLabels = new int[]{y - 11, ay - 11};
 	}
 
+	private void openAuctionMenu(AuctionRule rule, double mx, double my) {
+		openContextMenu(List.of(
+				new MenuEntry("Open", false, () -> editRule(rule)),
+				new MenuEntry("Duplicate", false, () -> {
+					AuctionRule copy = rule.copy();
+					cfg.rules.add(cfg.rules.indexOf(rule) + 1, copy);
+					cfg.onRuleToggled(copy);
+					AutoDonutConfig.save();
+					rebuildPending = true;
+				}),
+				new MenuEntry("Delete", true, () -> {
+					cfg.rules.remove(rule);
+					AutoDonutConfig.save();
+					rebuildPending = true;
+				})), mx, my);
+	}
+
+	private void openBuyMenu(BuyRule rule, double mx, double my) {
+		openContextMenu(List.of(
+				new MenuEntry("Open", false, () -> editBuyRule(rule)),
+				new MenuEntry("Duplicate", false, () -> {
+					BuyRule copy = rule.copy();
+					cfg.buyRules.add(cfg.buyRules.indexOf(rule) + 1, copy);
+					cfg.syncAutoBuy();
+					AutoDonutConfig.save();
+					rebuildPending = true;
+				}),
+				new MenuEntry("Delete", true, () -> {
+					cfg.buyRules.remove(rule);
+					cfg.syncAutoBuy();
+					AutoDonutConfig.save();
+					rebuildPending = true;
+				})), mx, my);
+	}
+
+	private int menuWidth() {
+		int w = 0;
+		for (MenuEntry e : contextMenu) w = Math.max(w, ui.width(e.label()));
+		return w + 24;
+	}
+
+	private int menuHeight() {
+		return contextMenu.size() * MENU_ROW_H + 6;
+	}
+
+	/** Opens the menu at the mouse, flipped left / up where it would leave the panel. */
+	private void openContextMenu(List<MenuEntry> entries, double mx, double my) {
+		contextMenu = entries;
+		int w = menuWidth();
+		int h = menuHeight();
+		menuX = (int) mx;
+		menuY = (int) my;
+		if (menuX + w > px + pw - 4) menuX -= w;
+		if (menuY + h > py + ph - 4) menuY -= h;
+		menuX = Math.max(px + 4, menuX);
+		menuY = Math.max(py + 4, menuY);
+		menuHover = -1;
+		for (Anim a : menuRowHover) a.snap(0);
+		menuOpen.snap(0);
+		menuOpen.set(1);
+		UiSounds.click();
+	}
+
+	private void closeContextMenu() {
+		contextMenu = null;
+		menuHover = -1;
+	}
+
+	/** The menu row under the mouse, or -1. */
+	private int menuRowAt(double mx, double my) {
+		if (contextMenu == null) return -1;
+		int w = menuWidth();
+		if (mx < menuX || mx >= menuX + w || my < menuY + 3 || my >= menuY + 3 + contextMenu.size() * MENU_ROW_H) return -1;
+		return (int) ((my - menuY - 3) / MENU_ROW_H);
+	}
+
+	/** Draws the right-click menu above everything else, fading and scaling in from its corner. */
+	private void drawContextMenu(int mx, int my) {
+		if (contextMenu == null) return;
+		Theme t = ui.theme;
+		float e = Anim.easeOutCubic(menuOpen.update(ui.dt));
+		int w = menuWidth();
+		int h = menuHeight();
+		int row = menuRowAt(mx, my);
+		if (row != menuHover) {
+			if (row >= 0) UiSounds.hover();
+			menuHover = row;
+		}
+		float base = ui.alpha;
+		ui.alpha = openProgress * e;
+		ui.g.pose().pushMatrix();
+		ui.g.pose().translate(menuX, menuY);
+		ui.g.pose().scale(0.92f + 0.08f * e);
+		ui.g.pose().translate(-menuX, -menuY);
+		ui.round(menuX - 1, menuY + 1, w + 2, h + 2, 5, t.shadow());
+		ui.card(menuX, menuY, w, h, 4, t.surface(), t.border());
+		for (int i = 0; i < contextMenu.size(); i++) {
+			MenuEntry entry = contextMenu.get(i);
+			Anim hv = menuRowHover[Math.min(i, menuRowHover.length - 1)];
+			hv.set(i == row ? 1 : 0);
+			float k = hv.update(ui.dt);
+			int ry = menuY + 3 + i * MENU_ROW_H;
+			if (k > 0.01f) {
+				int hl = entry.danger() ? Anim.lerpColor(t.surface(), t.danger(), 0.18f) : t.surfaceHover();
+				ui.round(menuX + 2, ry, w - 4, MENU_ROW_H, 3, Anim.lerpColor(t.surface(), hl, k));
+			}
+			int color = entry.danger() ? t.danger() : Anim.lerpColor(t.textMuted(), t.text(), k);
+			ui.text(entry.label(), menuX + 8 + Math.round(k * 2), ry + (MENU_ROW_H - ui.lineHeight()) / 2 + 1, color);
+		}
+		ui.g.pose().popMatrix();
+		ui.alpha = base;
+	}
+
 	private void setPage(Page next) {
+		closeContextMenu();
 		if (page == Page.EDIT && next != Page.EDIT) cleanUpEditing();
 		if (page == Page.BUY_EDIT && next != Page.BUY_EDIT) cleanUpBuyEditing();
 		page = next;
@@ -1088,6 +1218,7 @@ public class AutoDonutScreen extends Screen {
 		if (resultsVisible()) drawResults(mouseX, mouseY);
 		ui.alpha = openProgress;
 		ui.drawTooltip(px + 4, py + 4, px + pw - 4, py + ph - 4);
+		drawContextMenu(mouseX, mouseY);
 		graphics.pose().popMatrix();
 
 		graphics.pose().popMatrix();
@@ -1772,6 +1903,29 @@ public class AutoDonutScreen extends Screen {
 		double mx = event.x() / uiScale;
 		double my = event.y() / uiScale;
 
+		if (contextMenu != null) {
+			// The menu swallows every click: an entry runs it, anywhere else just closes the menu.
+			int row = menuRowAt(mx, my);
+			List<MenuEntry> entries = contextMenu;
+			closeContextMenu();
+			if (row >= 0) {
+				UiSounds.click();
+				entries.get(row).action().run();
+			}
+			return true;
+		}
+		if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+			// Right-click only does something on a rule card.
+			if (auctionGrid != null) {
+				int i = auctionGrid.cardAt(mx, my);
+				if (i >= 0) openAuctionMenu(cfg.rules.get(i), mx, my);
+			} else if (buyGrid != null) {
+				int i = buyGrid.cardAt(mx, my);
+				if (i >= 0) openBuyMenu(cfg.buyRules.get(i), mx, my);
+			}
+			return true;
+		}
+
 		if (resultsVisible()) {
 			int x = searchField.x;
 			int y = searchField.y + searchField.h + 2;
@@ -1883,6 +2037,7 @@ public class AutoDonutScreen extends Screen {
 		if (inputBlocked()) return true;
 		double mx = rawX / uiScale;
 		double my = rawY / uiScale;
+		if (contextMenu != null) closeContextMenu();
 		if (resultsVisible()) {
 			int max = Math.max(0, results.size() - MAX_RESULTS_SHOWN);
 			resultScroll = Math.max(0, Math.min(max, resultScroll - (int) Math.signum(scrollY)));
@@ -1917,6 +2072,12 @@ public class AutoDonutScreen extends Screen {
 	@Override
 	public boolean keyPressed(KeyEvent event) {
 		if (inputBlocked()) return true;
+		if (contextMenu != null && event.key() == InputConstants.KEY_ESCAPE) {
+			// Esc closes only the menu, not the panel.
+			closeContextMenu();
+			UiSounds.click();
+			return true;
+		}
 		if (anyFocused()) {
 			if (event.key() == InputConstants.KEY_ESCAPE) {
 				for (Widget w : widgets) w.setFocused(false);

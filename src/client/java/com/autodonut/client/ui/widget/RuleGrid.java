@@ -298,6 +298,19 @@ public class RuleGrid<R> extends Widget {
 		return false;
 	}
 
+	/** Index of the rule card under the mouse, or -1 (the add card and empty space give -1). */
+	public int cardAt(double mx, double my) {
+		if (!contains(mx, my)) return -1;
+		int off = Math.round(scroll.get());
+		int cw = cardW();
+		for (int i = 0; i < rules.size(); i++) {
+			int cx = cellX(i);
+			int cy = cellY(i, off);
+			if (mx >= cx && mx < cx + cw && my >= cy && my < cy + CARD_H) return i;
+		}
+		return -1;
+	}
+
 	@Override
 	public boolean mouseScrolled(double mx, double my, double amount) {
 		if (!contains(mx, my) || maxScroll() == 0) return false;

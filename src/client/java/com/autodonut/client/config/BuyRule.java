@@ -104,6 +104,25 @@ public class BuyRule {
 	/** Purchases since the counter was last reset (not saved). */
 	public transient int purchases;
 
+	/** A deep copy: same items and settings, its own item list; the purchase counter starts at 0. */
+	public BuyRule copy() {
+		BuyRule c = new BuyRule();
+		c.items = new ArrayList<>(items);
+		c.enabled = enabled;
+		c.budgetMode = budgetMode;
+		c.budgetExact = budgetExact;
+		c.quantity = quantity;
+		c.budgetMax = budgetMax;
+		c.searchMode = searchMode;
+		c.delayMin = delayMin;
+		c.delayMax = delayMax;
+		c.pauseAfterEnabled = pauseAfterEnabled;
+		c.pauseAfterCount = pauseAfterCount;
+		c.pauseKeyEnabled = pauseKeyEnabled;
+		c.speed = speed;
+		return c;
+	}
+
 	public boolean hasItems() {
 		return !items.isEmpty();
 	}
