@@ -131,6 +131,11 @@ public final class AutoAuctionController {
 
 	private String lagReason = "";
 
+	/** What the current lag is ("Server isn't answering (lag)", ...), or "" when not lagging. */
+	public String lagReason() {
+		return lagging ? (lagReason.isEmpty() ? "Server lagging" : lagReason) : "";
+	}
+
 	private void lagFor(long now, long ms, String reason) {
 		laggingUntil = Math.max(laggingUntil, now + ms);
 		lagReason = reason;

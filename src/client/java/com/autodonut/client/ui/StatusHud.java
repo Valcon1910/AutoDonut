@@ -60,8 +60,12 @@ public final class StatusHud {
 		// Auto Buy takes the label while it's working, or when it's the only feature running.
 		boolean showBuy = !auction.quickSelling() && !auction.busy()
 				&& (buy.busy() || (buy.isActive() && !auction.isActive()));
-		String label = showBuy ? "Auto Buy" : "Auto Auction";
-		String status = noResponse ? "Server not responding (Lag)" : showBuy ? buy.status() : auction.status();
+		// Lag found by AutoDonut's own checks while no feature is in the middle of something is
+		// shown as a system message rather than under a feature's name.
+		boolean system = (noResponse || auction.lagging()) && !auction.busy() && !auction.quickSelling() && !buy.busy();
+		String label = system ? "System" : showBuy ? "Auto Buy" : "Auto Auction";
+		String status = system ? (noResponse ? "Server not responding (Lag)" : auction.lagReason())
+				: noResponse ? "Server not responding (Lag)" : showBuy ? buy.status() : auction.status();
 		int fullW = 18 + UI.width(label) + 8 + UI.width(status) + 8;
 		int w = 18 + Math.round((fullW - 18) * e);
 		// Leave room for a top-left minimap (Xaero's, JourneyMap, VoxelMap).
