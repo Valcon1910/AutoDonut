@@ -790,7 +790,7 @@ public final class AutoAuctionController {
 
 	/** Pings the server once to tell lag apart from a listing that simply didn't go through. */
 	private void startLagCheck(Minecraft mc, long now) {
-		if (!ServerProbe.pingNow(mc)) {
+		if (!com.autodonut.client.ServerProbe.pingNow(mc)) {
 			// Pings can't be checked on this version: just start over.
 			retryFromStart(now);
 			return;
@@ -802,7 +802,7 @@ public final class AutoAuctionController {
 	}
 
 	private void tickLagCheck(long now) {
-		if (ServerProbe.answeredSince(lagCheckSentAt)) {
+		if (com.autodonut.client.ServerProbe.answeredSince(lagCheckSentAt)) {
 			// The server answers quickly, so it isn't lag: try the listing again from the start.
 			retryFromStart(now);
 		} else if (now > phaseUntil) {
