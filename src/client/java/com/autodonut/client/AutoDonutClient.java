@@ -117,7 +117,8 @@ public class AutoDonutClient implements ClientModInitializer {
 		ScreenEvents.AFTER_INIT.register((client, screen, w, h) ->
 				ScreenKeyboardEvents.afterKeyPress(screen).register((s, keyEvent) -> {
 					// Typing into a text box (creative / recipe search, anvil, sign...) never triggers R or J.
-					if (isTyping(s)) return;
+					// Signs, books and other text screens type without an EditBox; only menus with slots count.
+					if (isTyping(s) || !(s instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>)) return;
 					if (quickSellKey.matches(keyEvent) && QuickSell.allowedOn(s)) QuickSell.trigger(client);
 					// The auction menu Auto Buy opened swallows key mappings, so J is caught here too.
 					if (buyPauseKey.matches(keyEvent) && AutoBuyController.get().ownsScreen(s)) AutoBuyController.get().togglePause();
