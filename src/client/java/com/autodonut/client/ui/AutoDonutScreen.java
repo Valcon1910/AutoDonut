@@ -233,10 +233,33 @@ public class AutoDonutScreen extends Screen {
 		return NAV[index].page() == null ? 1f : Anim.easeInOut(sectionOpen[sectionOf(index)].get());
 	}
 
+	/**
+	 * Sidebar row heights. With every section open the list can be taller than the panel, so the
+	 * rows tighten to fit (down to 70%) instead of disappearing under the footer.
+	 */
+	private float navScale() {
+		int sections = 0, items = 0;
+		for (NavEntry e : NAV) {
+			if (e.page() == null) sections++;
+			else items++;
+		}
+		float needed = sections * (NAV_SECTION_H + 2) + items * (NAV_ITEM_H + 2);
+		float avail = ph - TOP - 8 - 34;
+		return Math.max(0.7f, Math.min(1f, avail / needed));
+	}
+
+	private int itemH() {
+		return Math.round(NAV_ITEM_H * navScale());
+	}
+
+	private int sectionH() {
+		return Math.round(NAV_SECTION_H * navScale());
+	}
+
 	private int navY(int index) {
 		float y = py + TOP + 8;
 		for (int i = 0; i < index; i++) {
-			y += NAV[i].page() == null ? NAV_SECTION_H + 2 : (NAV_ITEM_H + 2) * navOpenness(i);
+			y += NAV[i].page() == null ? sectionH() + 2 : (itemH() + 2) * navOpenness(i);
 		}
 		return Math.round(y);
 	}
@@ -1322,8 +1345,8 @@ public class AutoDonutScreen extends Screen {
 		int hy = Math.round(navAnim.update(ui.dt));
 		float baseAlpha = ui.alpha;
 		ui.alpha = baseAlpha * activeOpen;
-		ui.round(px + 5, hy, sw - 10, NAV_ITEM_H, 2, Anim.lerpColor(t.sidebar(), t.accent(), 0.10f));
-		ui.outline(px + 5, hy, sw - 10, NAV_ITEM_H, 1, t.accent());
+		ui.round(px + 5, hy, sw - 10, itemH(), 2, Anim.lerpColor(t.sidebar(), t.accent(), 0.10f));
+		ui.outline(px + 5, hy, sw - 10, itemH(), 1, t.accent());
 		ui.alpha = baseAlpha;
 
 		for (int i = 0; i < NAV.length; i++) {
@@ -1331,13 +1354,13 @@ public class AutoDonutScreen extends Screen {
 			int iy = navY(i);
 			if (entry.page() == null) {
 				// Clickable section header with an arrow: down when open, right when collapsed
-				boolean overHeader = mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_SECTION_H;
+				boolean overHeader = mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + sectionH();
 				if (overHeader && navHover[i].target() < 0.5f) UiSounds.hover();
 				navHover[i].set(overHeader ? 1 : 0);
 				navHover[i].update(ui.dt);
 				int hc = Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
 				boolean open = sectionOpen[i].target() > 0.5f;
-				int ax = px + 9, ay = iy + 3;
+				int ax = px + 9, ay = iy + (sectionH() - 8) / 2 + 1;
 				if (open) {
 					ui.fill(ax, ay + 1, ax + 5, ay + 2, hc);
 					ui.fill(ax + 1, ay + 2, ax + 4, ay + 3, hc);
@@ -1347,24 +1370,25 @@ public class AutoDonutScreen extends Screen {
 					ui.fill(ax + 2, ay + 1, ax + 3, ay + 4, hc);
 					ui.fill(ax + 3, ay + 2, ax + 4, ay + 3, hc);
 				}
-				ui.text(entry.label(), px + 17, iy + 2, hc);
+				ui.text(entry.label(), px + 17, iy + (sectionH() - 8) / 2, hc);
 				continue;
 			}
 			float open = navOpenness(i);
 			if (open < 0.05f) continue;
 			ui.alpha = baseAlpha * open;
-			boolean hovered = i != active && mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H;
+			boolean hovered = i != active && mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + itemH();
 			if (hovered && navHover[i].target() < 0.5f) UiSounds.hover();
 			navHover[i].set(hovered ? 1 : 0);
 			navHover[i].update(ui.dt);
 			int color = i == active ? t.text() : Anim.lerpColor(t.textMuted(), t.text(), navHover[i].get());
-			ui.text(entry.label(), px + 14 + Math.round(navHover[i].get() * 2), iy + 5, color);
+			int ty = iy + (itemH() - 8) / 2 + 1;
+			ui.text(entry.label(), px + 14 + Math.round(navHover[i].get() * 2), ty, color);
 			if (entry.page() == Page.AUCTION) {
 				auctionLight.anim.update(ui.dt);
-				ui.circle(px + sw - 14, iy + 9, 2, auctionLight.color(AutoAuctionController.get().isActive()));
+				ui.circle(px + sw - 14, ty + 4, 2, auctionLight.color(AutoAuctionController.get().isActive()));
 			} else if (entry.page() == Page.AUTOBUY) {
 				buyLight.anim.update(ui.dt);
-				ui.circle(px + sw - 14, iy + 9, 2, buyLight.color(AutoBuyController.get().isActive()));
+				ui.circle(px + sw - 14, ty + 4, 2, buyLight.color(AutoBuyController.get().isActive()));
 			}
 			ui.alpha = baseAlpha;
 		}
@@ -2025,7 +2049,7 @@ public class AutoDonutScreen extends Screen {
 		for (int i = 0; i < NAV.length; i++) {
 			int iy = navY(i);
 			if (NAV[i].page() == null) {
-				if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_SECTION_H) {
+				if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + sectionH()) {
 					sectionOpen[i].set(sectionOpen[i].target() > 0.5f ? 0 : 1);
 					UiSounds.click();
 					return true;
@@ -2033,7 +2057,7 @@ public class AutoDonutScreen extends Screen {
 				continue;
 			}
 			if (sectionOpen[sectionOf(i)].target() < 0.5f) continue;
-			if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + NAV_ITEM_H) {
+			if (mx >= px + 5 && mx < px + sw - 5 && my >= iy && my < iy + itemH()) {
 				if (NAV[i].page() != page) {
 					UiSounds.click();
 					setPage(NAV[i].page());
