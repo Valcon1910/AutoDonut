@@ -3,7 +3,6 @@ package com.autodonut.client;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.player.LocalPlayer;
@@ -16,7 +15,6 @@ import net.minecraft.world.inventory.Slot;
 import com.autodonut.client.auction.InventoryActions;
 import com.autodonut.client.config.AutoDonutConfig;
 import com.autodonut.client.auction.AutoAuctionController;
-import com.autodonut.client.ui.AutoDonutScreen;
 import com.autodonut.client.ui.QuickSellScreen;
 import com.autodonut.client.ui.UiSounds;
 import com.autodonut.mixin.client.AbstractContainerScreenAccessor;
@@ -37,7 +35,9 @@ public final class QuickSell {
 	/** Whether R should act on this screen (not while typing). */
 	public static boolean allowedOn(Screen screen) {
 		if (screen == null) return true;
-		if (screen instanceof ChatScreen || screen instanceof AutoDonutScreen || screen instanceof QuickSellScreen) return false;
+		// Only inventories and chests, where there's an item to hover. Signs, books, chat and other
+		// text screens type their own way (not always through an EditBox), so R stays a letter there.
+		if (!(screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>)) return false;
 		return !(screen.getFocused() instanceof EditBox);
 	}
 
