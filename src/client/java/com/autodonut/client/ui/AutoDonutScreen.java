@@ -976,6 +976,10 @@ public class AutoDonutScreen extends Screen {
 
 	private void addRule() {
 		AuctionRule rule = new AuctionRule();
+		// A new item follows the feature's switch: it never turns a stopped Auto Auction on.
+		boolean on = cfg.autoAuctionEnabled && cfg.hasAuctionItems();
+		rule.enabled = on;
+		cfg.autoAuctionEnabled = on;
 		cfg.rules.add(rule);
 		editRule(rule);
 		if (searchField != null) searchField.setFocused(true);
@@ -992,8 +996,11 @@ public class AutoDonutScreen extends Screen {
 
 	private void addBuyRule() {
 		BuyRule rule = new BuyRule();
+		// A new item follows the feature's switch: it never turns a stopped Auto Buy on.
+		boolean on = cfg.autoBuyEnabled && cfg.hasBuyItems();
+		rule.enabled = on;
+		cfg.autoBuyEnabled = on;
 		cfg.buyRules.add(rule);
-		cfg.syncAutoBuy();
 		editBuyRule(rule);
 		if (searchField != null) searchField.setFocused(true);
 	}

@@ -202,7 +202,7 @@ public final class AutoAuctionController {
 
 	public boolean isActive() {
 		AutoDonutConfig cfg = AutoDonutConfig.get();
-		return cfg.autoAuctionEnabled && !Lockdown.active() && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
+		return cfg.autoAuctionEnabled && cfg.hasAuctionItems() && !Lockdown.active() && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
 	}
 
 	/** True while this screen is the auction confirm menu being clicked in the background. */

@@ -124,7 +124,7 @@ public final class AutoBuyController {
 
 	public boolean isActive() {
 		AutoDonutConfig cfg = AutoDonutConfig.get();
-		return cfg.autoBuyEnabled && !Lockdown.active() && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
+		return cfg.autoBuyEnabled && cfg.hasBuyItems() && !Lockdown.active() && (!cfg.onlyOnDonut || ServerContext.isOnDonut());
 	}
 
 	/**
