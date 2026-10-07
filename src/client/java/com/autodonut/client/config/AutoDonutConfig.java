@@ -72,6 +72,16 @@ public class AutoDonutConfig {
 	public int hudOffset = 0;
 	/** Look-at HUD (Jade-style, fused with the status label). null = auto: on when Jade is installed. */
 	public Boolean lookHud = null;
+	/** HUD card background transparency in percent (0 = normal). */
+	public int hudTransparency = 0;
+	/** What the look-at HUD shows. */
+	public boolean hudHarvest = true;
+	public boolean hudBlockDetails = true;
+	public boolean hudMining = true;
+	public boolean hudHealth = true;
+	public boolean hudArmor = true;
+	public boolean hudItemCount = true;
+	public boolean hudStatusRow = true;
 	/** Items outside the hotbar: 0 = move them to a free hotbar slot first, 1 = ignore them (hotbar only). */
 	public int inventoryItems = 0;
 
@@ -242,5 +252,6 @@ public class AutoDonutConfig {
 		// AutoDonut only ever runs on Donut SMP.
 		onlyOnDonut = true;
 		hudOffset = Math.clamp(hudOffset, -60, 200);
+		hudTransparency = Math.clamp(hudTransparency, 0, 80);
 	}
 }

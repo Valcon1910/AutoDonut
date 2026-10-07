@@ -44,7 +44,7 @@ import com.autodonut.client.Updater;
 
 /** The AutoDonut control panel, opened with K. Fully custom drawn with animated transitions. */
 public class AutoDonutScreen extends Screen {
-	private enum Page { HOME, AUCTION, AUTOBUY, SAFETY, APPEARANCE, CHANGELOG, UPDATING, EDIT, BUY_EDIT }
+	private enum Page { HOME, AUCTION, AUTOBUY, SAFETY, HUD, UI_STYLE, CHANGELOG, UPDATING, EDIT, BUY_EDIT }
 
 	private static final float OPEN_MS = 220f;
 	private static final float CLOSE_MS = 160f;
@@ -63,9 +63,11 @@ public class AutoDonutScreen extends Screen {
 			new NavEntry("Auto Buy", Page.AUTOBUY),
 			new NavEntry("System", null),
 			new NavEntry("Safety", Page.SAFETY),
-			new NavEntry("Appearance", Page.APPEARANCE),
 			new NavEntry("Changelog", Page.CHANGELOG),
 			new NavEntry("Updating", Page.UPDATING),
+			new NavEntry("Appearance", null),
+			new NavEntry("HUD", Page.HUD),
+			new NavEntry("UI Style", Page.UI_STYLE),
 	};
 
 	private final AutoDonutConfig cfg = AutoDonutConfig.get();
@@ -252,7 +254,7 @@ public class AutoDonutScreen extends Screen {
 		ThemeSwitch theme = new ThemeSwitch(() -> cfg.darkMode, dark -> {
 			cfg.darkMode = dark;
 			AutoDonutConfig.save();
-			if (page == Page.APPEARANCE) rebuildPending = true;
+			if (page == Page.UI_STYLE) rebuildPending = true;
 		});
 		theme.bounds(closeX() - 8 - 34, py + (TOP - 16) / 2, 34, 16);
 		chrome.add(theme);
@@ -445,9 +447,7 @@ public class AutoDonutScreen extends Screen {
 						new SettingRow("Wait in AutoDonut panel", "Timers keep running; actions wait until you close it",
 								toggle(() -> cfg.pauseInPanel, v -> cfg.pauseInPanel = v), ToggleSwitch.WIDTH),
 						new SettingRow("Freeze in menus", "Freeze the current listing and timers while a chest, inventory or chat is open",
-								toggle(() -> cfg.pauseInMenus, v -> cfg.pauseInMenus = v), ToggleSwitch.WIDTH),
-						new SettingRow("HUD status", "Show what Auto Auction is doing",
-								toggle(() -> cfg.showHud, v -> cfg.showHud = v), ToggleSwitch.WIDTH)
+								toggle(() -> cfg.pauseInMenus, v -> cfg.pauseInMenus = v), ToggleSwitch.WIDTH)
 				);
 				// Full-height rows (title + hint); the page scrolls when they don't all fit.
 				safetyRows = rows;
@@ -456,7 +456,8 @@ public class AutoDonutScreen extends Screen {
 				layoutSafetyRows(0);
 				widgets.addAll(rows);
 			}
-			case APPEARANCE -> buildAppearance(x, w, top);
+			case HUD -> buildHud();
+			case UI_STYLE -> buildAppearance(x, w, top);
 			case UPDATING -> buildUpdating(x, w, top);
 			case CHANGELOG -> changelogScroll = 0;
 			case EDIT -> buildEditor(x, w, top);
@@ -843,15 +844,54 @@ public class AutoDonutScreen extends Screen {
 		accentGrid.bounds(x, ay, w, accentGrid.h);
 		widgets.add(accentGrid);
 
-		widgets.add(new SettingRow("Status label position", "Nudge it if it overlaps your minimap",
-				new Slider(-60, 200, () -> cfg.hudOffset, v -> {
-					cfg.hudOffset = v;
-					AutoDonutConfig.save();
-				}, v -> v == 0 ? "Auto" : (v > 0 ? "+" : "") + v), 130).bounds(x, ay + accentGrid.h + 10, w, 24));
-		widgets.add(new SettingRow("Look-at HUD", Compat.hasJade() ? "Replaces Jade's tooltip with AutoDonut's, fused with the status"
-				: "Show what you're looking at, Jade-style, with the AutoDonut status",
-				toggle(Compat::lookHudEnabled, v -> cfg.lookHud = v), ToggleSwitch.WIDTH).bounds(x, ay + accentGrid.h + 40, w, 24));
 		appearanceLabels = new int[]{y - 11, ay - 11};
+	}
+
+	/** HUD page: on/off, which HUD, transparency, what the look-at card shows. Scrolls like Safety. */
+	private void buildHud() {
+		java.util.function.BooleanSupplier statusMode = () -> !Compat.lookHudEnabled();
+		List<SettingRow> rows = List.of(
+				new SettingRow("HUD", "Show AutoDonut's HUD while you play",
+						toggle(() -> cfg.showHud, v -> cfg.showHud = v), ToggleSwitch.WIDTH),
+				new SettingRow("Style", Compat.hasJade() ? "HUD replaces Jade's tooltip" : "Which HUD to show",
+						new Segmented(new String[]{"HUD", "Status"}, () -> Compat.lookHudEnabled() ? 0 : 1, i -> {
+							cfg.lookHud = i == 0;
+							AutoDonutConfig.save();
+						}).tooltips("A card at the top of the screen showing what you're looking at (Jade-style), with the AutoDonut status underneath",
+								"Only the small AutoDonut status label in the corner" + (Compat.hasJade() ? "; Jade shows its own tooltip" : "")), 130),
+				new SettingRow("Transparency", "See-through card background; text stays readable",
+						new Slider(0, 80, () -> cfg.hudTransparency, v -> {
+							cfg.hudTransparency = v;
+							AutoDonutConfig.save();
+						}, v -> v + "%"), 130),
+				new SettingRow("Status label position", "Nudge it if it overlaps your minimap",
+						new Slider(-60, 200, () -> cfg.hudOffset, v -> {
+							cfg.hudOffset = v;
+							AutoDonutConfig.save();
+						}, v -> v == 0 ? "Auto" : (v > 0 ? "+" : "") + v), 130),
+				hudPart("Harvest tool", "Which tool the block needs and whether yours works", () -> cfg.hudHarvest, v -> cfg.hudHarvest = v, statusMode),
+				hudPart("Block details", "Crop growth, levels, power and other block states", () -> cfg.hudBlockDetails, v -> cfg.hudBlockDetails = v, statusMode),
+				hudPart("Mining progress", "A bar while you break the block", () -> cfg.hudMining, v -> cfg.hudMining = v, statusMode),
+				hudPart("Mob health", "Health bar for mobs and players", () -> cfg.hudHealth, v -> cfg.hudHealth = v, statusMode),
+				hudPart("Armor", "Armor points of mobs and players", () -> cfg.hudArmor, v -> cfg.hudArmor = v, statusMode),
+				hudPart("Dropped item count", "Stack size of items on the ground", () -> cfg.hudItemCount, v -> cfg.hudItemCount = v, statusMode),
+				hudPart("AutoDonut status", "The status line at the bottom of the card", () -> cfg.hudStatusRow, v -> cfg.hudStatusRow = v, statusMode)
+		);
+		safetyRows = rows;
+		safetyScroll.snap(0);
+		safetyScrollTarget = 0;
+		layoutSafetyRows(0);
+		widgets.addAll(rows);
+	}
+
+	private SettingRow hudPart(String title, String hint, java.util.function.BooleanSupplier get, java.util.function.Consumer<Boolean> set,
+			java.util.function.BooleanSupplier disabled) {
+		return new SettingRow(title, hint, toggle(get, set).disabled(disabled), ToggleSwitch.WIDTH);
+	}
+
+	/** Pages whose rows scroll (Safety and HUD share the same row list). */
+	private boolean scrollPage() {
+		return page == Page.SAFETY || page == Page.HUD;
 	}
 
 	private void openAuctionMenu(AuctionRule rule, double mx, double my) {
@@ -1155,8 +1195,8 @@ public class AutoDonutScreen extends Screen {
 		drawPageDecor();
 		if (editorClip) ui.endScissor();
 		float pageAlpha = ui.alpha;
-		boolean safetyClip = page == Page.SAFETY && safetyMaxScroll() > 0;
-		if (page == Page.SAFETY) {
+		boolean safetyClip = scrollPage() && safetyMaxScroll() > 0;
+		if (scrollPage()) {
 			safetyScrollTarget = Math.max(0, Math.min(safetyMaxScroll(), safetyScrollTarget));
 			safetyScroll.set(safetyScrollTarget);
 			layoutSafetyRows(Math.round(safetyScroll.update(ui.dt)));
@@ -1361,7 +1401,8 @@ public class AutoDonutScreen extends Screen {
 			case AUCTION -> "Auto Auction";
 			case AUTOBUY -> "Auto Buy";
 			case SAFETY -> "Safety";
-			case APPEARANCE -> "Appearance";
+			case HUD -> "HUD";
+			case UI_STYLE -> "UI Style";
 			case UPDATING -> "Updating";
 			case CHANGELOG -> "Changelog";
 			case EDIT -> "Edit Item";
@@ -1372,7 +1413,8 @@ public class AutoDonutScreen extends Screen {
 			case AUCTION -> "Pick items to sell. Matching stacks are listed on /ah automatically.";
 			case AUTOBUY -> "Pick items to buy. Listings within your budget are bought from /ah.";
 			case SAFETY -> "Pacing that keeps every action irregular and human.";
-			case APPEARANCE -> "Pick a colour style and an accent. Changes fade in instantly.";
+			case HUD -> "What AutoDonut shows on screen while you play.";
+			case UI_STYLE -> "Pick a colour style and an accent. Changes fade in instantly.";
 			case UPDATING -> "Keep AutoDonut up to date and see what the next version brings.";
 			case CHANGELOG -> "What changed in your version and every one before it.";
 			case EDIT -> "Choose the item, its price and which stack sizes to sell.";
@@ -1428,7 +1470,7 @@ public class AutoDonutScreen extends Screen {
 			}
 			case UPDATING -> drawUpdating(x, top, w);
 			case CHANGELOG -> drawChangelog(x, top, w);
-			case APPEARANCE -> {
+			case UI_STYLE -> {
 				if (appearanceLabels.length == 2) {
 					ui.text(cfg.darkMode ? "Dark style" : "Light style", x, appearanceLabels[0], t.textMuted());
 					ui.text("Accent colour", x, appearanceLabels[1], t.textMuted());
@@ -2061,7 +2103,7 @@ public class AutoDonutScreen extends Screen {
 			changelogScroll = Math.max(0, changelogScroll - (int) Math.signum(scrollY) * 2);
 			return true;
 		}
-		if (page == Page.SAFETY && safetyMaxScroll() > 0 && my >= bodyTop() && my < py + ph - 8) {
+		if (scrollPage() && safetyMaxScroll() > 0 && my >= bodyTop() && my < py + ph - 8) {
 			// The wheel scrolls the page here; sliders are still dragged with the mouse.
 			safetyScrollTarget = Math.max(0, Math.min(safetyMaxScroll(), safetyScrollTarget - (float) scrollY * 22));
 			return true;

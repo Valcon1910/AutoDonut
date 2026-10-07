@@ -67,6 +67,8 @@ public final class LookHud {
 	private static Entity cachedEntity;
 	private static ItemStack cachedHeld;
 	private static long cachedAt;
+	/** HUD part toggles the cached info was built with. */
+	private static int cachedFlags;
 	private static Info current;
 	/** What's drawn (lags behind {@link #current} while cross-fading). */
 	private static Info shown;
@@ -82,7 +84,7 @@ public final class LookHud {
 
 	/** The fused HUD is drawing, so the old status label and Jade's tooltip stay hidden. */
 	public static boolean active() {
-		return Compat.lookHudEnabled() && !Compat.streamerMode() && !Lockdown.active();
+		return com.autodonut.client.config.AutoDonutConfig.get().showHud && Compat.lookHudEnabled() && !Compat.streamerMode() && !Lockdown.active();
 	}
 
 	public static void extract(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
@@ -95,12 +97,12 @@ public final class LookHud {
 		UI.dt = Math.min(0.1f, (now - lastFrame) / 1_000_000_000f);
 		lastFrame = now;
 
-		boolean on = active() && mc.player != null && mc.level != null;
+		boolean on = active() && cfg.showHud && mc.player != null && mc.level != null;
 
 		// Status part: same rules as StatusHud.
 		boolean noResponse = !ServerProbe.responding();
 		boolean lagWarning = auction.lagging() || noResponse;
-		boolean allowed = on && cfg.showHud;
+		boolean allowed = on && cfg.showHud && cfg.hudStatusRow;
 		boolean wanted = allowed && (auction.isActive() || buy.isActive() || auction.quickSelling() || lagWarning);
 		net.minecraft.client.gui.screens.Screen open = mc.gui.screen();
 		boolean expanded = wanted && (open == null || auction.isHidden(open) || buy.isHidden(open));
@@ -172,9 +174,10 @@ public final class LookHud {
 		int y = 4 - Math.round((1f - Anim.easeOutCubic(v)) * 10);
 		float base = v * 0.92f;
 
-		UI.alpha = base * 0.6f;
+		float bg = base * (1f - cfg.hudTransparency / 100f);
+		UI.alpha = bg * 0.6f;
 		UI.round(x + 1, y + 2, w, h, 6, UI.theme.shadow());
-		UI.alpha = base;
+		UI.alpha = bg;
 		UI.card(x, y, w, h, 6, UI.theme.panel(), UI.theme.border());
 
 		UI.scissor(x, y, x + w, y + h);
@@ -192,6 +195,7 @@ public final class LookHud {
 			}
 			if (shown.living() != null) {
 				LivingEntity le = shown.living();
+				if (cfg.hudHealth) {
 				HEALTH.set(healthFraction(shown));
 				float hf = HEALTH.update(UI.dt);
 				int hp = Math.round(le.getHealth()), max = Math.round(le.getMaxHealth());
@@ -204,9 +208,10 @@ public final class LookHud {
 				UI.meter(x + 28, ly + 3, bw, hf, hf > 0.5f ? UI.theme.success() : hf > 0.25f ? Ui.WARNING : UI.theme.danger());
 				UI.text(hpText, x + 28 + bw + 5, ly, UI.theme.textMuted());
 				ly += 10;
+				}
 				int armor = le.getArmorValue();
-				if (armor > 0) UI.text("Armor: " + armor, x + 28, ly, UI.theme.textMuted());
-			} else if (shown.pos() != null) {
+				if (cfg.hudArmor && armor > 0) UI.text("Armor: " + armor, x + 28, ly, UI.theme.textMuted());
+			} else if (shown.pos() != null && cfg.hudMining) {
 				float p = destroyProgress(mc, shown.pos());
 				PROGRESS.set(p);
 				float pf = PROGRESS.update(UI.dt);
@@ -234,8 +239,9 @@ public final class LookHud {
 
 	/** Extra rows below the details: health bar (+ armor) for mobs, the mining bar for blocks. */
 	private static int extraRows(Info info) {
-		if (info.living() != null) return info.living().getArmorValue() > 0 ? 2 : 1;
-		return info.pos() != null ? 1 : 0;
+		AutoDonutConfig cfg = AutoDonutConfig.get();
+		if (info.living() != null) return (cfg.hudHealth ? 1 : 0) + (cfg.hudArmor && info.living().getArmorValue() > 0 ? 1 : 0);
+		return info.pos() != null && cfg.hudMining ? 1 : 0;
 	}
 
 	private static float healthFraction(Info info) {
@@ -248,6 +254,12 @@ public final class LookHud {
 	private static Info target(Minecraft mc) {
 		HitResult hit = mc.hitResult;
 		ItemStack held = mc.player.getMainHandItem();
+		AutoDonutConfig cfg = AutoDonutConfig.get();
+		int flags = (cfg.hudHarvest ? 1 : 0) | (cfg.hudBlockDetails ? 2 : 0) | (cfg.hudItemCount ? 4 : 0) | (cfg.hudHealth ? 8 : 0);
+		if (flags != cachedFlags) {
+			cachedFlags = flags;
+			current = null;
+		}
 		if (hit instanceof BlockHitResult bh && hit.getType() == HitResult.Type.BLOCK) {
 			BlockPos pos = bh.getBlockPos();
 			BlockState state = mc.level.getBlockState(pos);
@@ -289,12 +301,13 @@ public final class LookHud {
 				: state.is(BlockTags.MINEABLE_WITH_SHOVEL) ? "Shovel"
 				: state.is(BlockTags.MINEABLE_WITH_HOE) ? "Hoe" : null;
 		boolean canHarvest = !state.requiresCorrectToolForDrops() || mc.player.hasCorrectToolForDrops(state);
-		if (tool != null || state.requiresCorrectToolForDrops()) {
+		AutoDonutConfig cfg = AutoDonutConfig.get();
+		if (cfg.hudHarvest && (tool != null || state.requiresCorrectToolForDrops())) {
 			lines.add((tool == null ? "Tool" : tool) + (canHarvest ? "  ✔" : "  ✘"));
 			colors.add(canHarvest ? t.success() : t.danger());
 		}
 		// Readable block-state properties
-		for (Property<?> p : state.getProperties()) {
+		if (cfg.hudBlockDetails) for (Property<?> p : state.getProperties()) {
 			String name = p.getName();
 			String label = name.startsWith("age") ? "Growth" : LABELS.get(name);
 			if (label == null) continue;
@@ -339,8 +352,10 @@ public final class LookHud {
 			ItemStack stack = ie.getItem();
 			icon = stack.copy();
 			name = stack.getHoverName().getString();
-			lines.add("Count: " + stack.getCount());
-			colors.add(t.textMuted());
+			if (AutoDonutConfig.get().hudItemCount) {
+				lines.add("Count: " + stack.getCount());
+				colors.add(t.textMuted());
+			}
 		} else {
 			ItemStack pick = entity.getPickResult();
 			if (pick != null) icon = pick;
@@ -356,7 +371,7 @@ public final class LookHud {
 		UI.font = font;
 		int w = UI.boldWidth(name);
 		for (String l : lines) w = Math.max(w, UI.width(l));
-		if (living != null) w = Math.max(w, 110);
+		if (living != null && AutoDonutConfig.get().hudHealth) w = Math.max(w, 110);
 		if (block) w = Math.max(w, 70);
 		// Key also covers the block at that spot, so a different block in the same place cross-fades.
 		Object k = block ? List.of(pos, ((BlockState) key).getBlock()) : key;
