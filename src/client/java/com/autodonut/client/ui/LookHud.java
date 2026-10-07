@@ -84,7 +84,7 @@ public final class LookHud {
 
 	/** The fused HUD is drawing, so the old status label and Jade's tooltip stay hidden. */
 	public static boolean active() {
-		return com.autodonut.client.config.AutoDonutConfig.get().showHud && Compat.lookHudEnabled() && !Compat.streamerMode() && !Lockdown.active();
+		return com.autodonut.client.config.AutoDonutConfig.get().showHud && Compat.lookHudEnabled() && !Compat.streamerMode();
 	}
 
 	public static void extract(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
@@ -102,7 +102,9 @@ public final class LookHud {
 		// Status part: same rules as StatusHud.
 		boolean noResponse = !ServerProbe.responding();
 		boolean lagWarning = auction.lagging() || noResponse;
-		boolean allowed = on && cfg.showHud && cfg.hudStatusRow;
+		// The look-at part works in any world; the AutoDonut status row only on Donut SMP.
+		boolean allowed = on && cfg.showHud && cfg.hudStatusRow && !Lockdown.active()
+				&& com.autodonut.client.ServerContext.isOnDonut();
 		boolean wanted = allowed && (auction.isActive() || buy.isActive() || auction.quickSelling() || lagWarning);
 		net.minecraft.client.gui.screens.Screen open = mc.gui.screen();
 		boolean expanded = wanted && (open == null || auction.isHidden(open) || buy.isHidden(open));
