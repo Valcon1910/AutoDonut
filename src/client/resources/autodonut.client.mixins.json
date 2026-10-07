@@ -7,7 +7,9 @@
 		"ScreenMixin",
 		"ClientPacketListenerMixin",
 		"AbstractContainerScreenAccessor",
-		"GuiMixin"
+		"GuiMixin",
+		"JadeOverlayMixin",
+		"JadeTickMixin"
 	],
 	"injectors": { "defaultRequire": 1 }
 }

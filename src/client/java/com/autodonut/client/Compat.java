@@ -16,6 +16,7 @@ public final class Compat {
 
 	private static Boolean minimap;
 	private static Boolean recorder;
+	private static Boolean jade;
 	private static Boolean roundMinimap;
 	private static long shapeCheckedAt;
 	private static final Pattern XAERO_SHAPE = Pattern.compile("minimapShape:(\\d+)");
@@ -85,5 +86,17 @@ public final class Compat {
 	/** Streamer mode: turned on by the user, or automatically when a recording mod is present. */
 	public static boolean streamerMode() {
 		return AutoDonutConfig.get().streamerMode || hasRecorder();
+	}
+
+	/** Jade (the "what am I looking at" tooltip mod) is installed. */
+	public static boolean hasJade() {
+		if (jade == null) jade = FabricLoader.getInstance().isModLoaded("jade");
+		return jade;
+	}
+
+	/** Whether the look-at HUD is turned on (auto: on when Jade is installed). */
+	public static boolean lookHudEnabled() {
+		Boolean v = AutoDonutConfig.get().lookHud;
+		return v == null ? hasJade() : v;
 	}
 }

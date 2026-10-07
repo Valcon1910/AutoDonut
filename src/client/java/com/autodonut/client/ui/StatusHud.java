@@ -33,7 +33,7 @@ public final class StatusHud {
 		lastFrame = now;
 
 		boolean noResponse = !com.autodonut.client.ServerProbe.responding();
-		boolean allowed = cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active() && mc.player != null;
+		boolean allowed = !LookHud.active() && cfg.showHud && !Compat.streamerMode() && !com.autodonut.client.Lockdown.active() && mc.player != null;
 		boolean lagWarning = auction.lagging() || noResponse;
 		boolean wanted = allowed && (auction.isActive() || buy.isActive() || auction.quickSelling() || lagWarning);
 		// Full label only with no screen open and something to show; otherwise it folds to the logo badge,

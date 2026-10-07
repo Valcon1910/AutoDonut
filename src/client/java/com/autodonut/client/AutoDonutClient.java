@@ -137,6 +137,7 @@ public class AutoDonutClient implements ClientModInitializer {
 			AutoBuyController.get().onDisconnect();
 		});
 		HudElementRegistry.addLast(id("status"), StatusHud::extract);
+		HudElementRegistry.addLast(id("look"), com.autodonut.client.ui.LookHud::extract);
 		HudElementRegistry.addLast(id("boot"), BootOverlay::extract);
 		ClientPlayConnectionEvents.JOIN.register((listener, sender, client) -> {
 			ServerContext.onJoin(client.getSingleplayerServer() != null);

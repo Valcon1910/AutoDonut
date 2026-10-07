@@ -848,6 +848,9 @@ public class AutoDonutScreen extends Screen {
 					cfg.hudOffset = v;
 					AutoDonutConfig.save();
 				}, v -> v == 0 ? "Auto" : (v > 0 ? "+" : "") + v), 130).bounds(x, ay + accentGrid.h + 10, w, 24));
+		widgets.add(new SettingRow("Look-at HUD", Compat.hasJade() ? "Replaces Jade's tooltip with AutoDonut's, fused with the status"
+				: "Show what you're looking at, Jade-style, with the AutoDonut status",
+				toggle(Compat::lookHudEnabled, v -> cfg.lookHud = v), ToggleSwitch.WIDTH).bounds(x, ay + accentGrid.h + 40, w, 24));
 		appearanceLabels = new int[]{y - 11, ay - 11};
 	}
 

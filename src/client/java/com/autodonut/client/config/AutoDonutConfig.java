@@ -70,6 +70,8 @@ public class AutoDonutConfig {
 	public int detectionSpeed = 1;
 	/** Extra horizontal offset for the status label, added to the automatic position. */
 	public int hudOffset = 0;
+	/** Look-at HUD (Jade-style, fused with the status label). null = auto: on when Jade is installed. */
+	public Boolean lookHud = null;
 	/** Items outside the hotbar: 0 = move them to a free hotbar slot first, 1 = ignore them (hotbar only). */
 	public int inventoryItems = 0;
 
