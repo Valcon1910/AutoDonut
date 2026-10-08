@@ -353,11 +353,11 @@ public class AutoDonutScreen extends Screen {
 									cfg.quickSellEnabled = v;
 									AutoDonutConfig.save();
 								}, null).locked(this::runLocked),
-						new FeatureCard("spyglass", "HUD Status", "Small status label while Auto Auction runs",
-								() -> "", () -> cfg.showHud, v -> {
+						new FeatureCard("spyglass", "HUD", "What you're looking at, plus the AutoDonut status",
+								() -> "Style: " + (Compat.lookHudEnabled() ? "HUD" : "Status"), () -> cfg.showHud, v -> {
 									cfg.showHud = v;
 									AutoDonutConfig.save();
-								}, null).locked(this::runLocked),
+								}, () -> setPage(Page.HUD)),
 						new FeatureCard("gold_nugget", "Auto Buy", "Buys matching /ah listings within your budget",
 								AutoBuyController.get()::status, () -> cfg.autoBuyEnabled, v -> {
 									cfg.setAutoBuy(v);
@@ -872,7 +872,8 @@ public class AutoDonutScreen extends Screen {
 
 	/** HUD page: on/off, which HUD, transparency, what the look-at card shows. Scrolls like Safety. */
 	private void buildHud() {
-		java.util.function.BooleanSupplier statusMode = () -> !Compat.lookHudEnabled();
+		// The card's options only apply to the HUD style with the HUD on; otherwise they show off and locked.
+		java.util.function.BooleanSupplier statusMode = () -> !cfg.showHud || !Compat.lookHudEnabled();
 		List<SettingRow> rows = List.of(
 				new SettingRow("HUD", "Show AutoDonut's HUD while you play",
 						toggle(() -> cfg.showHud, v -> cfg.showHud = v), ToggleSwitch.WIDTH),
@@ -909,7 +910,8 @@ public class AutoDonutScreen extends Screen {
 
 	private SettingRow hudPart(String title, String hint, java.util.function.BooleanSupplier get, java.util.function.Consumer<Boolean> set,
 			java.util.function.BooleanSupplier disabled) {
-		return new SettingRow(title, hint, toggle(get, set).disabled(disabled), ToggleSwitch.WIDTH);
+		return new SettingRow(title, hint, toggle(() -> get.getAsBoolean() && !disabled.getAsBoolean(), set).disabled(disabled),
+				ToggleSwitch.WIDTH);
 	}
 
 	/** Pages whose rows scroll (Safety and HUD share the same row list). */
