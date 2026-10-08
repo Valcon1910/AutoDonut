@@ -116,21 +116,18 @@ public final class LookHud {
 
 		// Look part: only with no screen open, like Jade.
 		Info target = on && open == null ? target(mc) : null;
+		// Switching between targets is instant (no cross-fade or resize) so sweeping across blocks
+		// never flickers; only appearing and disappearing are animated.
+		boolean switched = false;
 		if (target != null && (shown == null || !shown.key().equals(target.key()))) {
-			if (shown == null || LOOK.get() < 0.05f || FADE.get() < 0.05f) {
-				boolean fresh = shown == null || LOOK.get() < 0.05f;
-				shown = target;
-				FADE.set(1);
-				if (fresh) FADE.snap(1);
-				HEALTH.snap(healthFraction(target));
-				PROGRESS.snap(0);
-				hpShown = -1;
-			} else {
-				FADE.set(0);
-			}
+			switched = shown != null && LOOK.get() > 0.05f;
+			shown = target;
+			FADE.snap(1);
+			HEALTH.snap(healthFraction(target));
+			PROGRESS.snap(0);
+			hpShown = -1;
 		} else if (target != null) {
 			shown = target;
-			FADE.set(1);
 		}
 		boolean hasLook = target != null;
 		LOOK.set(hasLook ? 1 : 0);
@@ -167,6 +164,10 @@ public final class LookHud {
 		int th = (hasLook ? lookH : 0) + (statusOn ? STATUS_H : 0) + (hasLook && statusOn ? 1 : 0);
 		if (tw > 0) WIDTH.set(tw);
 		if (th > 0) HEIGHT.set(th);
+		if (switched) {
+			if (tw > 0) WIDTH.snap(tw);
+			if (th > 0) HEIGHT.snap(th);
+		}
 		if (WIDTH.get() <= 0) WIDTH.snap(tw);
 		if (HEIGHT.get() <= 0) HEIGHT.snap(th);
 		int w = Math.max(18, Math.round(WIDTH.update(UI.dt)));
