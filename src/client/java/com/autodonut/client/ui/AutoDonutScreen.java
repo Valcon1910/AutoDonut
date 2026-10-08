@@ -96,7 +96,8 @@ public class AutoDonutScreen extends Screen {
 	private boolean lastOffline;
 	private static final int SAFETY_ROW_H = 26;
 	private static final int SAFETY_GAP = 3;
-	private List<SettingRow> safetyRows = List.of();
+	/** Scrolling rows of the Safety and HUD pages (setting rows, plus the HUD card style picker). */
+	private List<Widget> safetyRows = List.of();
 	private final Anim safetyScroll = new Anim(0, 18);
 	private float safetyScrollTarget;
 	/** In-panel boot-up: start time (-1 = not booting), results per step (null entry = passed). */
@@ -473,7 +474,7 @@ public class AutoDonutScreen extends Screen {
 								toggle(() -> cfg.pauseInMenus, v -> cfg.pauseInMenus = v), ToggleSwitch.WIDTH)
 				);
 				// Full-height rows (title + hint); the page scrolls when they don't all fit.
-				safetyRows = rows;
+				safetyRows = List.copyOf(rows);
 				safetyScroll.snap(0);
 				safetyScrollTarget = 0;
 				layoutSafetyRows(0);
@@ -874,7 +875,7 @@ public class AutoDonutScreen extends Screen {
 	private void buildHud() {
 		// The card's options only apply to the HUD style with the HUD on; otherwise they show off and locked.
 		java.util.function.BooleanSupplier statusMode = () -> !cfg.showHud || !Compat.lookHudEnabled();
-		List<SettingRow> rows = List.of(
+		List<Widget> rows = List.of(
 				new SettingRow("HUD", "Show AutoDonut's HUD while you play",
 						toggle(() -> cfg.showHud, v -> cfg.showHud = v), ToggleSwitch.WIDTH),
 				new SettingRow("Style", Compat.hasJade() ? "HUD replaces Jade's tooltip" : "Which HUD to show",
@@ -883,11 +884,7 @@ public class AutoDonutScreen extends Screen {
 							AutoDonutConfig.save();
 						}).tooltips("A card at the top of the screen showing what you're looking at (Jade-style), with the AutoDonut status underneath",
 								"Only the small AutoDonut status label in the corner" + (Compat.hasJade() ? "; Jade shows its own tooltip" : "")), 130),
-				new SettingRow("Card style", "How the look-at card is drawn",
-						new Segmented(LookHud.Style.LABELS, () -> LookHud.Style.of(cfg.hudCardStyle).ordinal(), i -> {
-							cfg.hudCardStyle = LookHud.Style.values()[i].name();
-							AutoDonutConfig.save();
-						}).tooltips(LookHud.Style.TOOLTIPS).disabled(statusMode), 210),
+				cardStylePicker(statusMode),
 				new SettingRow("Transparency", "See-through card background; text stays readable",
 						new Slider(0, 80, () -> cfg.hudTransparency, v -> {
 							cfg.hudTransparency = v;
@@ -917,6 +914,33 @@ public class AutoDonutScreen extends Screen {
 			java.util.function.BooleanSupplier disabled) {
 		return new SettingRow(title, hint, toggle(() -> get.getAsBoolean() && !disabled.getAsBoolean(), set).disabled(disabled),
 				ToggleSwitch.WIDTH);
+	}
+
+	/** Tiles with a live preview of each look-at card style. */
+	private ChoiceGrid cardStylePicker(java.util.function.BooleanSupplier locked) {
+		LookHud.Style[] styles = LookHud.Style.values();
+		return new ChoiceGrid(styles.length, 3, 58,
+				() -> LookHud.Style.of(cfg.hudCardStyle).ordinal(),
+				i -> {
+					cfg.hudCardStyle = styles[i].name();
+					AutoDonutConfig.save();
+				},
+				(ui, i, tx, ty, tw, th, selected) -> {
+					LookHud.drawPreview(ui, styles[i], tx + 4, ty + 4, tw - 8, th - 18);
+					ui.textCentered(ui.trim(LookHud.Style.LABELS[i], tw - 6), tx + tw / 2, ty + th - 12,
+							selected ? ui.theme.text() : ui.theme.textMuted());
+				}).disabled(locked);
+	}
+
+	/** Height of a scrolling row: setting rows are fixed, the style picker uses its own. */
+	private static int scrollRowH(Widget row) {
+		return row instanceof SettingRow ? SAFETY_ROW_H : row.h;
+	}
+
+	private int scrollContentH() {
+		int content = -SAFETY_GAP;
+		for (Widget row : safetyRows) content += scrollRowH(row) + SAFETY_GAP;
+		return content;
 	}
 
 	/** Pages whose rows scroll (Safety and HUD share the same row list). */
@@ -1290,7 +1314,7 @@ public class AutoDonutScreen extends Screen {
 		if (safetyClip) {
 			ui.endScissor();
 			int track = py + ph - 8 - bodyTop();
-			int content = safetyRows.size() * (SAFETY_ROW_H + SAFETY_GAP) - SAFETY_GAP;
+			int content = scrollContentH();
 			int barH = Math.max(16, track * track / content);
 			int barY = bodyTop() + Math.round((track - barH) * (safetyScroll.get() / safetyMaxScroll()));
 			ui.fill(contentX() + contentW() - 2, barY, contentX() + contentW(), barY + barH, ui.theme.track());
@@ -1567,7 +1591,7 @@ public class AutoDonutScreen extends Screen {
 	private final ActiveLight buyLight = new ActiveLight(AutoBuyController.get().isActive());
 
 	private int safetyMaxScroll() {
-		int content = safetyRows.size() * (SAFETY_ROW_H + SAFETY_GAP) - SAFETY_GAP;
+		int content = scrollContentH();
 		return Math.max(0, content - (py + ph - 8 - bodyTop()));
 	}
 
@@ -1575,11 +1599,12 @@ public class AutoDonutScreen extends Screen {
 	private void layoutSafetyRows(int offset) {
 		int top = bodyTop();
 		int bottom = py + ph - 8;
-		for (int i = 0; i < safetyRows.size(); i++) {
-			SettingRow row = safetyRows.get(i);
-			int ry = top + i * (SAFETY_ROW_H + SAFETY_GAP) - offset;
-			row.bounds(contentX(), ry, contentW() - (safetyMaxScroll() > 0 ? 6 : 0), SAFETY_ROW_H);
-			row.visible = ry + SAFETY_ROW_H > top && ry < bottom;
+		int ry = top - offset;
+		for (Widget row : safetyRows) {
+			int rh = scrollRowH(row);
+			row.bounds(contentX(), ry, contentW() - (safetyMaxScroll() > 0 ? 6 : 0), rh);
+			row.visible = ry + rh > top && ry < bottom;
+			ry += rh + SAFETY_GAP;
 		}
 	}
 

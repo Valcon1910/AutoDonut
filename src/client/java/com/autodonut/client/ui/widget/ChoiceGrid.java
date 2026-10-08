@@ -2,6 +2,7 @@ package com.autodonut.client.ui.widget;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
@@ -27,6 +28,7 @@ public class ChoiceGrid extends Widget {
 	private final TilePainter painter;
 	private final List<Anim> hovers = new ArrayList<>();
 	private static final int GAP = 6;
+	private BooleanSupplier disabled = () -> false;
 
 	public ChoiceGrid(int count, int columns, int tileH, IntSupplier selected, IntConsumer onSelect, TilePainter painter) {
 		this.count = count;
@@ -38,6 +40,12 @@ public class ChoiceGrid extends Widget {
 		for (int i = 0; i < count; i++) hovers.add(new Anim(0, 16));
 		int rows = (count + columns - 1) / columns;
 		this.h = rows * tileH + (rows - 1) * GAP;
+	}
+
+	/** While disabled the grid is shaded, has no hover and ignores clicks. */
+	public ChoiceGrid disabled(BooleanSupplier disabled) {
+		this.disabled = disabled;
+		return this;
 	}
 
 	private int tileW() {
@@ -61,6 +69,12 @@ public class ChoiceGrid extends Widget {
 	protected void draw(Ui ui, int mx, int my) {
 		int tw = tileW();
 		int sel = selected.getAsInt();
+		boolean off = disabled.getAsBoolean();
+		float base = ui.alpha;
+		if (off) {
+			ui.alpha = base * 0.4f;
+			mx = Integer.MIN_VALUE;
+		}
 		for (int i = 0; i < count; i++) {
 			int tx = tileX(i), ty = tileY(i);
 			boolean over = mx >= tx && mx < tx + tw && my >= ty && my < ty + tileH;
@@ -74,11 +88,13 @@ public class ChoiceGrid extends Widget {
 			else if (hv.get() > 0.01f) ui.outline(tx, ty, tw, tileH, 1, Anim.lerpColor(bg, ui.theme.border(), hv.get()));
 			painter.paint(ui, i, tx, ty, tw, tileH, i == sel);
 		}
+		ui.alpha = base;
 	}
 
 	@Override
 	public boolean mouseClicked(double mx, double my) {
 		if (!contains(mx, my)) return false;
+		if (disabled.getAsBoolean()) return true;
 		int tw = tileW();
 		for (int i = 0; i < count; i++) {
 			int tx = tileX(i), ty = tileY(i);

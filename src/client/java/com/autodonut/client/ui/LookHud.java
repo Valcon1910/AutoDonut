@@ -15,6 +15,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.BlockHitResult;
@@ -33,7 +34,8 @@ import com.autodonut.client.config.AutoDonutConfig;
  * the AutoDonut status line. Replaces {@link StatusHud} and Jade's tooltip while it's on.
  */
 public final class LookHud {
-	private static final Ui UI = new Ui();
+	/** Drawing context; swapped for the screen's while drawing a preview. */
+	private static Ui UI = new Ui();
 	private static final Anim VISIBLE = new Anim(0, 8);
 	private static final Anim WIDTH = new Anim(0, 14);
 	private static final Anim HEIGHT = new Anim(0, 14);
@@ -159,21 +161,11 @@ public final class LookHud {
 
 		// Target size; the card eases toward it.
 		Style sty = Style.of(cfg.hudCardStyle);
-		int statusH = sty.compact ? 12 : STATUS_H;
-		int cx = sty.pad + 20;
-		String inline = null;
-		if (shown != null && sty.compact) {
-			if (!shown.tools().isEmpty()) inline = shown.canHarvest() ? "\u2714" : "\u2718";
-			else if (shown.living() != null && cfg.hudHealth) inline = healthText(shown.living());
-			else if (!shown.details().isEmpty()) inline = shown.details().get(0);
-		}
-		int lookH = shown == null ? 0 : sty.compact ? 20
-				: Math.max(sty.bodyY + shown.details().size() * 10 + extraRows(shown) * 10
-						+ (shown.tools().isEmpty() ? 0 : 16) + 2, sty.iconY + 18);
-		int lookW = shown == null ? 0 : sty.compact
-				? cx + nameWidth(sty, shown.name()) + (inline == null ? 0 : 8 + UI.width(inline)) + 8
-				: shown.width() - 28 + cx;
-		int statusW = (sty.logo ? 18 : 6) + Math.round((UI.width(label) + 8 + UI.width(status) + 8) * e);
+		int statusH = statusHeight(sty);
+		String inline = inline(sty, shown, cfg);
+		int lookH = lookHeight(sty, shown);
+		int lookW = lookWidth(sty, shown, inline);
+		int statusW = statusWidth(sty, label, status, e);
 		int tw = Math.max(statusOn ? statusW : 0, hasLook ? lookW : 0);
 		int th = (hasLook ? lookH : 0) + (statusOn ? statusH : 0) + (hasLook && statusOn ? 1 : 0);
 		if (tw > 0) WIDTH.set(tw);
@@ -190,17 +182,35 @@ public final class LookHud {
 		int x = graphics.guiWidth() / 2 - Math.round(w * sty.scale / 2f);
 		int y = 4 - Math.round((1f - Anim.easeOutCubic(v)) * 10);
 		float base = v * 0.92f;
-		boolean scaled = sty.scale != 1f;
-		if (scaled) {
-			// Scale around the card's top-left corner so everything below draws in card units.
-			UI.g.pose().pushMatrix();
-			UI.g.pose().translate(x, y);
-			UI.g.pose().scale(sty.scale);
-			UI.g.pose().translate(-x, -y);
+		float hf = 0;
+		if (shown != null && shown.living() != null) {
+			HEALTH.set(healthFraction(shown));
+			hf = HEALTH.update(UI.dt);
 		}
+		float pf = shown != null && shown.living() == null && shown.pos() != null && cfg.hudMining
+				? smoothProgress(destroyProgress(mc, shown.pos())) : 0;
+		UI.g.pose().pushMatrix();
+		// Scale around the card's top-left corner so everything below draws in card units.
+		UI.g.pose().translate(x, y);
+		UI.g.pose().scale(sty.scale);
+		paint(sty, shown, inline, lookH, w, h, base, base * (1f - cfg.hudTransparency / 100f), look, fade, st, e, v,
+				hasLook, label, status, lagWarning, hf, pf, cfg);
+		UI.g.pose().popMatrix();
+	}
+
+	/**
+	 * Draws a card at (0, 0) in the current pose with {@link #UI}: background, look section and
+	 * status row. Shared by the live HUD and the HUD page's style previews.
+	 */
+	private static void paint(Style sty, Info shown, String inline, int lookH, int w, int h, float base, float bgAlpha,
+			float look, float fade, float st, float e, float v, boolean hasLook, String label, String status,
+			boolean lagWarning, float hf, float pf, AutoDonutConfig cfg) {
+		int x = 0, y = 0;
+		int statusH = statusHeight(sty);
+		int cx = sty.pad + 20;
 
 		if (sty.background) {
-			float bg = base * (1f - cfg.hudTransparency / 100f);
+			float bg = bgAlpha;
 			UI.alpha = bg * 0.6f;
 			UI.round(x + 1, y + 2, w, h, sty.radius, UI.theme.shadow());
 			UI.alpha = bg;
@@ -244,8 +254,6 @@ public final class LookHud {
 			}
 			if (shown.living() != null) {
 				LivingEntity le = shown.living();
-				HEALTH.set(healthFraction(shown));
-				float hf = HEALTH.update(UI.dt);
 				if (!sty.compact && cfg.hudHealth) {
 					String hpt = healthText(le);
 					int bw = Math.max(40, w - cx - 12 - UI.width(hpt));
@@ -256,7 +264,6 @@ public final class LookHud {
 				int armor = le.getArmorValue();
 				if (!sty.compact && cfg.hudArmor && armor > 0) txt(sty, "Armor: " + armor, x + cx, ly, UI.theme.textMuted());
 			} else if (shown.pos() != null && cfg.hudMining) {
-				float pf = smoothProgress(destroyProgress(mc, shown.pos()));
 				// Compact has no row for it, so the bar runs along the card's bottom edge.
 				if (pf > 0.01f) {
 					if (sty.compact) bar(sty, x + 4, y + lookH - 3, w - 8, pf, UI.theme.accent());
@@ -287,7 +294,75 @@ public final class LookHud {
 			}
 		}
 		UI.endScissor();
-		if (scaled) UI.g.pose().popMatrix();
+	}
+
+	private static int statusHeight(Style sty) {
+		return sty.compact ? 12 : STATUS_H;
+	}
+
+	/** Compact style's one inline detail: harvest check, health, or the first detail line. */
+	private static String inline(Style sty, Info shown, AutoDonutConfig cfg) {
+		if (shown == null || !sty.compact) return null;
+		if (!shown.tools().isEmpty()) return shown.canHarvest() ? "\u2714" : "\u2718";
+		if (shown.living() != null && cfg.hudHealth) return healthText(shown.living());
+		return shown.details().isEmpty() ? null : shown.details().get(0);
+	}
+
+	private static int lookHeight(Style sty, Info shown) {
+		if (shown == null) return 0;
+		if (sty.compact) return 20;
+		return Math.max(sty.bodyY + shown.details().size() * 10 + extraRows(shown) * 10
+				+ (shown.tools().isEmpty() ? 0 : 16) + 2, sty.iconY + 18);
+	}
+
+	private static int lookWidth(Style sty, Info shown, String inline) {
+		if (shown == null) return 0;
+		int cx = sty.pad + 20;
+		return sty.compact ? cx + nameWidth(sty, shown.name()) + (inline == null ? 0 : 8 + UI.width(inline)) + 8
+				: shown.width() - 28 + cx;
+	}
+
+	private static int statusWidth(Style sty, String label, String status, float e) {
+		return (sty.logo ? 18 : 6) + Math.round((UI.width(label) + 8 + UI.width(status) + 8) * e);
+	}
+
+	private static Info previewInfo;
+
+	/**
+	 * Draws a sample card ("Diamond Ore" with a pickaxe, a detail line, a half-done mining bar and
+	 * a status line) in the given style, scaled down to fit and centred in the rect.
+	 */
+	public static void drawPreview(Ui ui, Style sty, int rx, int ry, int rw, int rh) {
+		Ui saved = UI;
+		UI = ui;
+		try {
+			if (previewInfo == null) {
+				previewInfo = new Info("preview", new ItemStack(Items.DIAMOND_ORE), "Diamond Ore", List.of("Growth: 75%"),
+						new int[]{ui.theme.textMuted()}, null, BlockPos.ZERO, 110,
+						List.of(new ItemStack(Items.IRON_PICKAXE)), true);
+			}
+			previewInfo.colors()[0] = ui.theme.textMuted();
+			AutoDonutConfig cfg = AutoDonutConfig.get();
+			String label = "Auto Auction", status = "Next listing in 4s";
+			String inline = inline(sty, previewInfo, cfg);
+			int lookH = lookHeight(sty, previewInfo);
+			int statusH = statusHeight(sty);
+			int w = Math.max(lookWidth(sty, previewInfo, inline), statusWidth(sty, label, status, 1f));
+			int h = lookH + statusH + 1;
+			float scale = Math.min(1f, Math.min(rw / (w * sty.scale), rh / (h * sty.scale))) * sty.scale;
+			int px = rx + Math.round((rw - w * scale) / 2f);
+			int py = ry + Math.round((rh - h * scale) / 2f);
+			float a = ui.alpha;
+			ui.g.pose().pushMatrix();
+			ui.g.pose().translate(px, py);
+			ui.g.pose().scale(scale);
+			paint(sty, previewInfo, inline, lookH, w, h, a, a * (1f - cfg.hudTransparency / 100f), 1f, 1f, 1f, 1f, 1f,
+					true, label, status, false, 0f, 0.55f, cfg);
+			ui.g.pose().popMatrix();
+			ui.alpha = a;
+		} finally {
+			UI = saved;
+		}
 	}
 
 	/** Look-at card styles; one draw path reads these layout parameters. */
