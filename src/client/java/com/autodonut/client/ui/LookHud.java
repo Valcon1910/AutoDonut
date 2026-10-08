@@ -160,7 +160,7 @@ public final class LookHud {
 		// Target size; the card eases toward it.
 		int statusW = 18 + Math.round((UI.width(label) + 8 + UI.width(status) + 8) * e);
 		int lookH = shown == null ? 0 : 26 + shown.details().size() * 10 + extraRows(shown) * 10
-				+ (shown.tools().isEmpty() ? 0 : 12);
+				+ (shown.tools().isEmpty() ? 0 : 16);
 		int tw = Math.max(statusOn ? statusW : 0, hasLook && shown != null ? shown.width() : 0);
 		int th = (hasLook ? lookH : 0) + (statusOn ? STATUS_H : 0) + (hasLook && statusOn ? 1 : 0);
 		if (tw > 0) WIDTH.set(tw);
@@ -198,14 +198,14 @@ public final class LookHud {
 				int tx = x + 28;
 				for (ItemStack tool : shown.tools()) {
 					UI.g.pose().pushMatrix();
-					UI.g.pose().translate(tx, ly - 1);
-					UI.g.pose().scale(0.625f);
+					UI.g.pose().translate(tx, ly - 2);
+					UI.g.pose().scale(0.875f);
 					UI.item(tool, 0, 0);
 					UI.g.pose().popMatrix();
-					tx += 12;
+					tx += 16;
 				}
-				UI.text(shown.canHarvest() ? "✔" : "✘", tx + 2, ly, shown.canHarvest() ? UI.theme.success() : UI.theme.danger());
-				ly += 12;
+				UI.text(shown.canHarvest() ? "✔" : "✘", tx + 2, ly + 2, shown.canHarvest() ? UI.theme.success() : UI.theme.danger());
+				ly += 16;
 			}
 			for (int i = 0; i < shown.details().size(); i++) {
 				UI.text(shown.details().get(i), x + 28, ly, shown.colors()[i]);
@@ -389,7 +389,7 @@ public final class LookHud {
 		if (block) w = Math.max(w, 70);
 		// Key also covers the block at that spot, so a different block in the same place cross-fades.
 		Object k = block ? List.of(pos, ((BlockState) key).getBlock()) : key;
-		w = Math.max(w, tools.size() * 12 + 14);
+		w = Math.max(w, tools.size() * 16 + 14);
 		return new Info(k, icon, name, List.copyOf(lines), cols, living, pos, Math.min(260, w + 40), tools, canHarvest);
 	}
 
