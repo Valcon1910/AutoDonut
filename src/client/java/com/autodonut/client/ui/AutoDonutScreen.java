@@ -883,6 +883,11 @@ public class AutoDonutScreen extends Screen {
 							AutoDonutConfig.save();
 						}).tooltips("A card at the top of the screen showing what you're looking at (Jade-style), with the AutoDonut status underneath",
 								"Only the small AutoDonut status label in the corner" + (Compat.hasJade() ? "; Jade shows its own tooltip" : "")), 130),
+				new SettingRow("Card style", "How the look-at card is drawn",
+						new Segmented(LookHud.Style.LABELS, () -> LookHud.Style.of(cfg.hudCardStyle).ordinal(), i -> {
+							cfg.hudCardStyle = LookHud.Style.values()[i].name();
+							AutoDonutConfig.save();
+						}).tooltips(LookHud.Style.TOOLTIPS).disabled(statusMode), 210),
 				new SettingRow("Transparency", "See-through card background; text stays readable",
 						new Slider(0, 80, () -> cfg.hudTransparency, v -> {
 							cfg.hudTransparency = v;

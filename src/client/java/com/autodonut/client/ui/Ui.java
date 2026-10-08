@@ -139,6 +139,12 @@ public final class Ui {
 		g.text(font, s, x, y, c(color), false);
 	}
 
+	/** Text with the font's drop shadow, for drawing without a background. */
+	public void shadowText(String s, int x, int y, int color) {
+		if (alpha < 0.04f || s.isEmpty()) return;
+		g.text(font, s, x, y, c(color), true);
+	}
+
 	public void bold(String s, int x, int y, int color) {
 		if (alpha < 0.04f || s.isEmpty()) return;
 		g.text(font, Component.literal(s).withStyle(ChatFormatting.BOLD), x, y, c(color));

@@ -158,11 +158,24 @@ public final class LookHud {
 				: noResponse ? "Server not responding (Lag)" : showBuy ? buy.status() : auction.status();
 
 		// Target size; the card eases toward it.
-		int statusW = 18 + Math.round((UI.width(label) + 8 + UI.width(status) + 8) * e);
-		int lookH = shown == null ? 0 : 26 + shown.details().size() * 10 + extraRows(shown) * 10
-				+ (shown.tools().isEmpty() ? 0 : 16);
-		int tw = Math.max(statusOn ? statusW : 0, hasLook && shown != null ? shown.width() : 0);
-		int th = (hasLook ? lookH : 0) + (statusOn ? STATUS_H : 0) + (hasLook && statusOn ? 1 : 0);
+		Style sty = Style.of(cfg.hudCardStyle);
+		int statusH = sty.compact ? 12 : STATUS_H;
+		int cx = sty.pad + 20;
+		String inline = null;
+		if (shown != null && sty.compact) {
+			if (!shown.tools().isEmpty()) inline = shown.canHarvest() ? "\u2714" : "\u2718";
+			else if (shown.living() != null && cfg.hudHealth) inline = healthText(shown.living());
+			else if (!shown.details().isEmpty()) inline = shown.details().get(0);
+		}
+		int lookH = shown == null ? 0 : sty.compact ? 20
+				: Math.max(sty.bodyY + shown.details().size() * 10 + extraRows(shown) * 10
+						+ (shown.tools().isEmpty() ? 0 : 16) + 2, sty.iconY + 18);
+		int lookW = shown == null ? 0 : sty.compact
+				? cx + nameWidth(sty, shown.name()) + (inline == null ? 0 : 8 + UI.width(inline)) + 8
+				: shown.width() - 28 + cx;
+		int statusW = (sty.logo ? 18 : 6) + Math.round((UI.width(label) + 8 + UI.width(status) + 8) * e);
+		int tw = Math.max(statusOn ? statusW : 0, hasLook ? lookW : 0);
+		int th = (hasLook ? lookH : 0) + (statusOn ? statusH : 0) + (hasLook && statusOn ? 1 : 0);
 		if (tw > 0) WIDTH.set(tw);
 		if (th > 0) HEIGHT.set(th);
 		if (switched) {
@@ -172,30 +185,46 @@ public final class LookHud {
 		if (WIDTH.get() <= 0) WIDTH.snap(tw);
 		if (HEIGHT.get() <= 0) HEIGHT.snap(th);
 		int w = Math.max(18, Math.round(WIDTH.update(UI.dt)));
-		int h = Math.max(STATUS_H, Math.round(HEIGHT.update(UI.dt)));
+		int h = Math.max(statusH, Math.round(HEIGHT.update(UI.dt)));
 
-		int x = graphics.guiWidth() / 2 - w / 2;
+		int x = graphics.guiWidth() / 2 - Math.round(w * sty.scale / 2f);
 		int y = 4 - Math.round((1f - Anim.easeOutCubic(v)) * 10);
 		float base = v * 0.92f;
+		boolean scaled = sty.scale != 1f;
+		if (scaled) {
+			// Scale around the card's top-left corner so everything below draws in card units.
+			UI.g.pose().pushMatrix();
+			UI.g.pose().translate(x, y);
+			UI.g.pose().scale(sty.scale);
+			UI.g.pose().translate(-x, -y);
+		}
 
-		float bg = base * (1f - cfg.hudTransparency / 100f);
-		UI.alpha = bg * 0.6f;
-		UI.round(x + 1, y + 2, w, h, 6, UI.theme.shadow());
-		UI.alpha = bg;
-		UI.card(x, y, w, h, 6, UI.theme.panel(), UI.theme.border());
+		if (sty.background) {
+			float bg = base * (1f - cfg.hudTransparency / 100f);
+			UI.alpha = bg * 0.6f;
+			UI.round(x + 1, y + 2, w, h, sty.radius, UI.theme.shadow());
+			UI.alpha = bg;
+			int border = sty == Style.JADE ? Anim.lerpColor(UI.theme.border(), UI.theme.accent(), 0.45f) : UI.theme.border();
+			UI.card(x, y, w, h, sty.radius, UI.theme.panel(), border);
+		}
 
 		UI.scissor(x, y, x + w, y + h);
 		// Look section
 		if (shown != null && look > 0.01f) {
 			float a = base * look * fade;
 			UI.alpha = a;
-			UI.fill(x + 1, y + 6, x + 3, y + Math.min(h - 6, lookH - 4), UI.theme.accent());
-			UI.item(shown.icon(), x + 8, y + 5);
-			UI.bold(UI.trim(shown.name(), w - 36), x + 28, y + 9, UI.theme.text());
-			int ly = y + 24;
-			if (!shown.tools().isEmpty()) {
+			if (sty.stripe) UI.fill(x + 1, y + 6, x + 3, y + Math.min(h - 6, lookH - 4), UI.theme.accent());
+			UI.item(shown.icon(), x + sty.pad, y + sty.iconY);
+			int nameRoom = w - cx - 8 - (inline == null ? 0 : 8 + UI.width(inline));
+			name(sty, UI.trim(shown.name(), nameRoom), x + cx, y + sty.nameY);
+			if (inline != null) {
+				int ic = inline.equals("\u2714") ? UI.theme.success() : inline.equals("\u2718") ? UI.theme.danger() : UI.theme.textMuted();
+				txt(sty, inline, x + w - 8 - UI.width(inline), y + sty.nameY, ic);
+			}
+			int ly = y + sty.bodyY;
+			if (!sty.compact && !shown.tools().isEmpty()) {
 				// Tool icons at the tier needed, then whether the held item can harvest it.
-				int tx = x + 28;
+				int tx = x + cx;
 				for (ItemStack tool : shown.tools()) {
 					UI.g.pose().pushMatrix();
 					UI.g.pose().translate(tx, ly - 2);
@@ -204,53 +233,137 @@ public final class LookHud {
 					UI.g.pose().popMatrix();
 					tx += 16;
 				}
-				UI.text(shown.canHarvest() ? "✔" : "✘", tx + 2, ly + 2, shown.canHarvest() ? UI.theme.success() : UI.theme.danger());
+				txt(sty, shown.canHarvest() ? "\u2714" : "\u2718", tx + 2, ly + 2, shown.canHarvest() ? UI.theme.success() : UI.theme.danger());
 				ly += 16;
 			}
-			for (int i = 0; i < shown.details().size(); i++) {
-				UI.text(shown.details().get(i), x + 28, ly, shown.colors()[i]);
-				ly += 10;
+			if (!sty.compact) {
+				for (int i = 0; i < shown.details().size(); i++) {
+					txt(sty, shown.details().get(i), x + cx, ly, shown.colors()[i]);
+					ly += 10;
+				}
 			}
 			if (shown.living() != null) {
 				LivingEntity le = shown.living();
-				if (cfg.hudHealth) {
 				HEALTH.set(healthFraction(shown));
 				float hf = HEALTH.update(UI.dt);
-				int hp = Math.round(le.getHealth()), max = Math.round(le.getMaxHealth());
-				if (hp != hpShown || max != hpMaxShown) {
-					hpShown = hp;
-					hpMaxShown = max;
-					hpText = hp + " / " + max + " ❤";
-				}
-				int bw = Math.max(40, w - 40 - UI.width(hpText));
-				UI.meter(x + 28, ly + 3, bw, hf, hf > 0.5f ? UI.theme.success() : hf > 0.25f ? Ui.WARNING : UI.theme.danger());
-				UI.text(hpText, x + 28 + bw + 5, ly, UI.theme.textMuted());
-				ly += 10;
+				if (!sty.compact && cfg.hudHealth) {
+					String hpt = healthText(le);
+					int bw = Math.max(40, w - cx - 12 - UI.width(hpt));
+					bar(sty, x + cx, ly + 3, bw, hf, hf > 0.5f ? UI.theme.success() : hf > 0.25f ? Ui.WARNING : UI.theme.danger());
+					txt(sty, hpt, x + cx + bw + 5, ly, UI.theme.textMuted());
+					ly += 10;
 				}
 				int armor = le.getArmorValue();
-				if (cfg.hudArmor && armor > 0) UI.text("Armor: " + armor, x + 28, ly, UI.theme.textMuted());
+				if (!sty.compact && cfg.hudArmor && armor > 0) txt(sty, "Armor: " + armor, x + cx, ly, UI.theme.textMuted());
 			} else if (shown.pos() != null && cfg.hudMining) {
 				float pf = smoothProgress(destroyProgress(mc, shown.pos()));
-				if (pf > 0.01f) UI.meter(x + 28, ly + 3, w - 40, pf, UI.theme.accent());
+				// Compact has no row for it, so the bar runs along the card's bottom edge.
+				if (pf > 0.01f) {
+					if (sty.compact) bar(sty, x + 4, y + lookH - 3, w - 8, pf, UI.theme.accent());
+					else bar(sty, x + cx, ly + 3, w - cx - 12, pf, UI.theme.accent());
+				}
 			}
 		}
 		// Divider + status row
 		if (st > 0.01f) {
-			int sy = y + h - STATUS_H;
-			if (hasLook || look > 0.01f) {
+			int sy = y + h - statusH;
+			if ((hasLook || look > 0.01f) && sty.background) {
 				UI.alpha = base * st * Math.max(look, 0.0f);
 				UI.fill(x + 6, sy - 1, x + w - 6, sy, UI.theme.border());
 			}
-			UI.alpha = 1f;
-			int size = Math.round(12 * Anim.easeInOut(v * st));
-			if (size >= 2) UI.logo(x + 9 - size / 2, sy + 8 - size / 2, size);
+			int tx = x + 6;
+			if (sty.logo) {
+				UI.alpha = 1f;
+				int full = sty.compact ? 9 : 12;
+				int size = Math.round(full * Anim.easeInOut(v * st));
+				if (size >= 2) UI.logo(x + 9 - size / 2, sy + statusH / 2 - size / 2, size);
+				tx = x + 17;
+			}
 			if (e > 0.05f) {
 				UI.alpha = base * st * e;
-				UI.text(label, x + 17, sy + 4, UI.theme.text());
-				UI.text(status, x + 17 + UI.width(label) + 8, sy + 4, lagWarning ? Ui.WARNING : UI.theme.textMuted());
+				int ty = sy + (statusH - 8) / 2;
+				txt(sty, label, tx, ty, UI.theme.text());
+				txt(sty, status, tx + UI.width(label) + 8, ty, lagWarning ? Ui.WARNING : UI.theme.textMuted());
 			}
 		}
 		UI.endScissor();
+		if (scaled) UI.g.pose().popMatrix();
+	}
+
+	/** Look-at card styles; one draw path reads these layout parameters. */
+	public enum Style {
+		JADE(2, 4, 3, 5, 16, 1f, false, true, false, false, false, false),
+		AUTODONUT(6, 8, 5, 9, 24, 1f, true, true, true, false, true, false),
+		COMPACT(8, 5, 2, 6, 20, 1f, false, true, true, true, true, false),
+		LARGE(7, 10, 6, 10, 26, 1.25f, true, true, true, false, true, false),
+		MINIMAL(0, 2, 2, 6, 20, 1f, false, false, false, false, true, true);
+
+		public static final String[] LABELS = {"Jade", "Donut", "Compact", "Large", "Minimal"};
+		public static final String[] TOOLTIPS = {
+				"Like Jade's own tooltip: a compact dark box with a thin border",
+				"AutoDonut's card with the accent stripe and logo (default)",
+				"A single small row: icon, name and the key detail",
+				"Everything 25% bigger with roomier spacing",
+				"No background, just icons and shadowed text"};
+
+		final int radius, pad, iconY, nameY, bodyY;
+		final float scale;
+		final boolean stripe, background, boldName, compact, logo, shadow;
+
+		Style(int radius, int pad, int iconY, int nameY, int bodyY, float scale, boolean stripe, boolean background,
+				boolean boldName, boolean compact, boolean logo, boolean shadow) {
+			this.radius = radius;
+			this.pad = pad;
+			this.iconY = iconY;
+			this.nameY = nameY;
+			this.bodyY = bodyY;
+			this.scale = scale;
+			this.stripe = stripe;
+			this.background = background;
+			this.boldName = boldName;
+			this.compact = compact;
+			this.logo = logo;
+			this.shadow = shadow;
+		}
+
+		/** The style with that name, or the AutoDonut card. */
+		public static Style of(String name) {
+			for (Style s : values()) if (s.name().equals(name)) return s;
+			return AUTODONUT;
+		}
+	}
+
+	private static void txt(Style sty, String s, int x, int y, int color) {
+		if (sty.shadow) UI.shadowText(s, x, y, color);
+		else UI.text(s, x, y, color);
+	}
+
+	private static void name(Style sty, String s, int x, int y) {
+		if (sty.boldName) UI.bold(s, x, y, UI.theme.text());
+		else txt(sty, s, x, y, UI.theme.text());
+	}
+
+	private static int nameWidth(Style sty, String s) {
+		return sty.boldName ? UI.boldWidth(s) : UI.width(s);
+	}
+
+	/** Progress bar; thinner without a background. */
+	private static void bar(Style sty, int x, int y, int w, float fraction, int color) {
+		int bh = sty.background ? 3 : 2;
+		UI.fill(x, y, x + w, y + bh, UI.theme.track());
+		int fw = Math.round(Anim.clamp01(fraction) * w);
+		if (fw > 0) UI.fill(x, y, x + fw, y + bh, color);
+	}
+
+	/** "x / y ❤", rebuilt only when the numbers change. */
+	private static String healthText(LivingEntity le) {
+		int hp = Math.round(le.getHealth()), max = Math.round(le.getMaxHealth());
+		if (hp != hpShown || max != hpMaxShown) {
+			hpShown = hp;
+			hpMaxShown = max;
+			hpText = hp + " / " + max + " \u2764";
+		}
+		return hpText;
 	}
 
 	/** Extra rows below the details: health bar (+ armor) for mobs, the mining bar for blocks. */

@@ -74,6 +74,8 @@ public class AutoDonutConfig {
 	public Boolean lookHud = null;
 	/** HUD card background transparency in percent (0 = normal). */
 	public int hudTransparency = 0;
+	/** Look-at card style, a LookHud.Style name. */
+	public String hudCardStyle = "AUTODONUT";
 	/** What the look-at HUD shows. */
 	public boolean hudHarvest = true;
 	public boolean hudBlockDetails = true;
@@ -252,6 +254,7 @@ public class AutoDonutConfig {
 		// AutoDonut only ever runs on Donut SMP.
 		onlyOnDonut = true;
 		hudOffset = Math.clamp(hudOffset, -60, 200);
+		if (hudCardStyle == null) hudCardStyle = "AUTODONUT";
 		hudTransparency = Math.clamp(hudTransparency, 0, 80);
 	}
 }

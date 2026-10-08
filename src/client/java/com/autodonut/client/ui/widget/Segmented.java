@@ -1,5 +1,6 @@
 package com.autodonut.client.ui.widget;
 
+import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
@@ -14,6 +15,7 @@ public class Segmented extends Widget {
 	private final IntConsumer setter;
 	private final Anim slide;
 	private String[] tooltips;
+	private BooleanSupplier disabled = () -> false;
 
 	public Segmented(String[] options, IntSupplier getter, IntConsumer setter) {
 		this.options = options;
@@ -29,8 +31,21 @@ public class Segmented extends Widget {
 		return this;
 	}
 
+	/** While disabled the control is shaded and can't be changed (tooltips still show). */
+	public Segmented disabled(BooleanSupplier disabled) {
+		this.disabled = disabled;
+		return this;
+	}
+
 	@Override
 	protected void draw(Ui ui, int mx, int my) {
+		float base = ui.alpha;
+		if (disabled.getAsBoolean()) ui.alpha = base * 0.4f;
+		drawControl(ui, mx, my);
+		ui.alpha = base;
+	}
+
+	private void drawControl(Ui ui, int mx, int my) {
 		ui.card(x, y, w, h, 3, ui.theme.surface(), ui.theme.border());
 		slide.set(getter.getAsInt());
 		float s = slide.update(ui.dt);
@@ -58,6 +73,7 @@ public class Segmented extends Widget {
 	@Override
 	public boolean mouseClicked(double mx, double my) {
 		if (!contains(mx, my)) return false;
+		if (disabled.getAsBoolean()) return true;
 		float segW = (w - 4) / (float) options.length;
 		int i = (int) ((mx - x - 2) / segW);
 		int next = Math.max(0, Math.min(options.length - 1, i));
