@@ -59,7 +59,7 @@ public final class LookHud {
 
 	/** What the card shows for one target; rebuilt only when the target changes. */
 	private record Info(Object key, ItemStack icon, String name, List<String> details, int[] colors,
-			LivingEntity living, BlockPos pos, int width) { }
+			LivingEntity living, BlockPos pos, int width, List<ItemStack> tools, boolean canHarvest) { }
 
 	// Cache keys for the current target, compared without allocating.
 	private static BlockState cachedState;
@@ -159,7 +159,8 @@ public final class LookHud {
 
 		// Target size; the card eases toward it.
 		int statusW = 18 + Math.round((UI.width(label) + 8 + UI.width(status) + 8) * e);
-		int lookH = shown == null ? 0 : 26 + shown.details().size() * 10 + extraRows(shown) * 10;
+		int lookH = shown == null ? 0 : 26 + shown.details().size() * 10 + extraRows(shown) * 10
+				+ (shown.tools().isEmpty() ? 0 : 12);
 		int tw = Math.max(statusOn ? statusW : 0, hasLook && shown != null ? shown.width() : 0);
 		int th = (hasLook ? lookH : 0) + (statusOn ? STATUS_H : 0) + (hasLook && statusOn ? 1 : 0);
 		if (tw > 0) WIDTH.set(tw);
@@ -192,6 +193,20 @@ public final class LookHud {
 			UI.item(shown.icon(), x + 8, y + 5);
 			UI.bold(UI.trim(shown.name(), w - 36), x + 28, y + 9, UI.theme.text());
 			int ly = y + 24;
+			if (!shown.tools().isEmpty()) {
+				// Tool icons at the tier needed, then whether the held item can harvest it.
+				int tx = x + 28;
+				for (ItemStack tool : shown.tools()) {
+					UI.g.pose().pushMatrix();
+					UI.g.pose().translate(tx, ly - 1);
+					UI.g.pose().scale(0.625f);
+					UI.item(tool, 0, 0);
+					UI.g.pose().popMatrix();
+					tx += 12;
+				}
+				UI.text(shown.canHarvest() ? "✔" : "✘", tx + 2, ly, shown.canHarvest() ? UI.theme.success() : UI.theme.danger());
+				ly += 12;
+			}
 			for (int i = 0; i < shown.details().size(); i++) {
 				UI.text(shown.details().get(i), x + 28, ly, shown.colors()[i]);
 				ly += 10;
@@ -215,9 +230,7 @@ public final class LookHud {
 				int armor = le.getArmorValue();
 				if (cfg.hudArmor && armor > 0) UI.text("Armor: " + armor, x + 28, ly, UI.theme.textMuted());
 			} else if (shown.pos() != null && cfg.hudMining) {
-				float p = destroyProgress(mc, shown.pos());
-				PROGRESS.set(p);
-				float pf = PROGRESS.update(UI.dt);
+				float pf = smoothProgress(destroyProgress(mc, shown.pos()));
 				if (pf > 0.01f) UI.meter(x + 28, ly + 3, w - 40, pf, UI.theme.accent());
 			}
 		}
@@ -299,16 +312,9 @@ public final class LookHud {
 		List<String> lines = new ArrayList<>();
 		List<Integer> colors = new ArrayList<>();
 		// Harvestability
-		String tool = state.is(BlockTags.MINEABLE_WITH_PICKAXE) ? "Pickaxe"
-				: state.is(BlockTags.MINEABLE_WITH_AXE) ? "Axe"
-				: state.is(BlockTags.MINEABLE_WITH_SHOVEL) ? "Shovel"
-				: state.is(BlockTags.MINEABLE_WITH_HOE) ? "Hoe" : null;
 		boolean canHarvest = !state.requiresCorrectToolForDrops() || mc.player.hasCorrectToolForDrops(state);
 		AutoDonutConfig cfg = AutoDonutConfig.get();
-		if (cfg.hudHarvest && (tool != null || state.requiresCorrectToolForDrops())) {
-			lines.add((tool == null ? "Tool" : tool) + (canHarvest ? "  ✔" : "  ✘"));
-			colors.add(canHarvest ? t.success() : t.danger());
-		}
+		List<ItemStack> tools = cfg.hudHarvest ? toolsFor(state) : List.of();
 		// Readable block-state properties
 		if (cfg.hudBlockDetails) for (Property<?> p : state.getProperties()) {
 			String name = p.getName();
@@ -341,7 +347,7 @@ public final class LookHud {
 		}
 		ItemStack icon = new ItemStack(state.getBlock().asItem());
 		String name = state.getBlock().getName().getString();
-		return build(mc.font, state, icon, name, lines, colors, null, pos, true);
+		return build(mc.font, state, icon, name, lines, colors, null, pos, true, tools, canHarvest);
 	}
 
 	private static Info entityInfo(Font font, Entity entity) {
@@ -369,6 +375,11 @@ public final class LookHud {
 
 	private static Info build(Font font, Object key, ItemStack icon, String name, List<String> lines, List<Integer> colors,
 			LivingEntity living, BlockPos pos, boolean block) {
+		return build(font, key, icon, name, lines, colors, living, pos, block, List.of(), true);
+	}
+
+	private static Info build(Font font, Object key, ItemStack icon, String name, List<String> lines, List<Integer> colors,
+			LivingEntity living, BlockPos pos, boolean block, List<ItemStack> tools, boolean canHarvest) {
 		int[] cols = new int[colors.size()];
 		for (int i = 0; i < cols.length; i++) cols[i] = colors.get(i);
 		UI.font = font;
@@ -378,7 +389,57 @@ public final class LookHud {
 		if (block) w = Math.max(w, 70);
 		// Key also covers the block at that spot, so a different block in the same place cross-fades.
 		Object k = block ? List.of(pos, ((BlockState) key).getBlock()) : key;
-		return new Info(k, icon, name, List.copyOf(lines), cols, living, pos, Math.min(260, w + 40));
+		w = Math.max(w, tools.size() * 12 + 14);
+		return new Info(k, icon, name, List.copyOf(lines), cols, living, pos, Math.min(260, w + 40), tools, canHarvest);
+	}
+
+	private static float lastSample, rate;
+	private static long sampleAt;
+
+	/**
+	 * The game only updates mining progress once per tick (20 steps a second), so between
+	 * ticks the bar keeps moving at the measured rate instead of jumping step by step.
+	 */
+	private static float smoothProgress(float sample) {
+		long now = System.nanoTime();
+		if (sample <= 0f) {
+			lastSample = 0;
+			rate = 0;
+			sampleAt = now;
+			return 0;
+		}
+		if (sample != lastSample) {
+			float dt = (now - sampleAt) / 1_000_000_000f;
+			if (sample > lastSample && dt > 0.01f && dt < 0.5f) rate = (sample - lastSample) / dt;
+			else if (sample < lastSample) rate = 0;
+			lastSample = sample;
+			sampleAt = now;
+		}
+		float ahead = rate * Math.min(0.06f, (now - sampleAt) / 1_000_000_000f);
+		return Math.min(1f, lastSample + ahead);
+	}
+
+	/**
+	 * The tools that mine a block, each at the lowest tier that can harvest it (stone pickaxe for
+	 * iron ore, wooden for stone...). Several when more than one tool type works.
+	 */
+	private static List<ItemStack> toolsFor(BlockState state) {
+		String tier = state.is(BlockTags.NEEDS_DIAMOND_TOOL) ? "diamond"
+				: state.is(BlockTags.NEEDS_IRON_TOOL) ? "iron"
+				: state.is(BlockTags.NEEDS_STONE_TOOL) ? "stone" : "wooden";
+		List<ItemStack> out = new ArrayList<>();
+		if (state.is(BlockTags.MINEABLE_WITH_PICKAXE)) out.add(tool(tier, "pickaxe"));
+		if (state.is(BlockTags.MINEABLE_WITH_AXE)) out.add(tool(tier, "axe"));
+		if (state.is(BlockTags.MINEABLE_WITH_SHOVEL)) out.add(tool(tier, "shovel"));
+		if (state.is(BlockTags.MINEABLE_WITH_HOE)) out.add(tool(tier, "hoe"));
+		out.removeIf(ItemStack::isEmpty);
+		return out;
+	}
+
+	private static ItemStack tool(String tier, String kind) {
+		var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
+				.getValue(net.minecraft.resources.Identifier.withDefaultNamespace(tier + "_" + kind));
+		return item == null ? ItemStack.EMPTY : new ItemStack(item);
 	}
 
 	/** Mining progress (0..1) on the given block, or 0 when not mining it / not readable. */
