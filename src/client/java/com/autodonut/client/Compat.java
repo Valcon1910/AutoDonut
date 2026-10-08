@@ -97,6 +97,6 @@ public final class Compat {
 	/** Whether the look-at HUD is turned on (auto: on when Jade is installed). */
 	public static boolean lookHudEnabled() {
 		Boolean v = AutoDonutConfig.get().lookHud;
-		return v == null ? hasJade() : v;
+		return v == null || v; // unset = on, with or without Jade
 	}
 }
